@@ -1,0 +1,47 @@
+# 바뀐 파일 위치 -> area 라벨 규칙 (.github/workflows/pr-labeler.yml 이 사용)
+
+area/charts:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'charts/**'
+
+area/apps:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'apps/**'
+
+area/argocd:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'argocd/**'
+
+area/infra:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'infra/**'
+
+area/namespaces:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'namespaces/**'
+
+area/schema:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'schema/**'
+
+area/compose:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'compose/**'
+
+area/ci:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**'
+
+area/docs:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'docs/**'
+      - '**/*.md'
