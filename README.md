@@ -25,9 +25,14 @@
 
 실제 값은 레포에 올리지 않는다. `.env.example` 에 이름만 적는다.
 
+Phase 1a compose(`compose/`)용 (`.env.example` 참고). 1b 이후 EKS 비밀값은 AWS Secrets Manager 에 두고 values 에는 이름만 적는다.
+
 | 이름 | 설명 |
 |---|---|
-| (준비 중) | |
+| `IMAGE_REGISTRY` · `IMAGE_TAG` | 띄울 이미지 주소 · 태그 (CI 봇이 갱신하는 `image.tag` 와 같은 값) |
+| `CLICKHOUSE_USER` · `CLICKHOUSE_PASSWORD` | ClickHouse 계정 |
+| `POSTGRES_USER` · `POSTGRES_PASSWORD` | PostgreSQL 계정 |
+| `MYSQL_USER` · `MYSQL_PASSWORD` | 쇼핑몰 MySQL 계정 |
 
 ## 포트
 
