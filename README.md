@@ -42,12 +42,13 @@ Phase 1a compose(`compose/`)용 (`.env.example` 참고). 1b 이후 EKS 비밀값
 
 ## 관련 문서
 
-- [설계 문서 (결정 기록 원본)](https://github.com/2026-techeer-project-team-b/monimo-backend/tree/main/docs/design): monimo-backend 레포의 `docs/design/`
+- [설계 문서 (결정 기록 원본)](https://github.com/2026-techeer-project-team-b/monimo-backend/tree/HEAD/docs/design): monimo-backend 레포의 `docs/design/`
 - [레포별 파일 구성](https://app.notion.com/p/3e1d7d6851ff80a8a110e8aea0b5783b)
 - [깃허브 레포지토리 규칙](https://app.notion.com/p/3dcd7d6851ff8000b795f1cc609124e6)
 
 ## 기여 규칙
 
-- `main` 직접 push 금지, PR로만 머지
+- 브랜치 전략: 기능 브랜치 → `develop`(기본 브랜치, 작업을 모으는 곳) → 배포 단위로 `develop` → `main`
+- `main` · `develop` 직접 push 금지, PR로만 머지. PR 의 base 는 기본값(`develop`) 그대로 두면 된다
 - 브랜치: `feat/<이슈번호>-<설명>` · `fix/<이슈번호>-<설명>` · `chore/<설명>`
 - 커밋: `<타입>(<범위>): <요약>` (타입: feat · fix · docs · chore · refactor · test)
