@@ -1,0 +1,9 @@
+# 프롬프트 로그 — 승조
+
+AI 에게 무엇을 어떻게 물었고 무엇이 나왔는지 남긴다. 규칙과 틀은 `monimo-backend` 의 [`docs/prompts/README.md`](https://github.com/2026-techeer-project-team-b/monimo-backend/blob/HEAD/docs/prompts/README.md) 가 정본이다. 여기에는 **이 레포에서 한 작업**의 로그만 둔다 — 코드와 **같은 PR** 에, 파일 이름 `YYYY-MM-DD-<작업>-<이슈번호>.md`.
+
+## 목록
+
+| 날짜 | 작업 | 한 번에 | 고쳐 물음 |
+|---|---|---|---|
+| (아직 없음) | | | |
