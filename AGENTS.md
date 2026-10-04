@@ -53,7 +53,7 @@ Helm · Argo CD · YAML.
 - 레포 초기 구성, PR 라벨 자동화와 머지 슬랙 알림 (`#1`)
 - `.env.example` — Phase 1a compose 용 이미지 · 인프라 계정 이름 (`#2`)
 - CODEOWNERS (`#3`), develop 브랜치 전략 (`#4`), 설계 문서 링크를 `tree/HEAD` 로 (`#5`)
-- `AGENTS.md` · `CLAUDE.md`, README 「AI 와 일한 방법」 절, `docs/prompts/`(프롬프트 로그 — 코드와 같은 PR 에). 하네스 정본은 backend `docs/harness/README.md` 한 곳
+- `AGENTS.md` · `CLAUDE.md`, README 「AI 와 일한 방법」 절, `docs/prompts/`(프롬프트 로그 : 코드와 같은 PR 에). 하네스 정본은 backend `docs/seungjo/harness.md` 한 곳
 
 ## 6. 지금 막혀 있는 것
 
