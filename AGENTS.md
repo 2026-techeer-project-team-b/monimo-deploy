@@ -54,6 +54,7 @@ Helm · Argo CD · YAML.
 - `.env.example` — Phase 1a compose 용 이미지 · 인프라 계정 이름 (`#2`)
 - CODEOWNERS (`#3`), develop 브랜치 전략 (`#4`), 설계 문서 링크를 `tree/HEAD` 로 (`#5`)
 - `AGENTS.md` · `CLAUDE.md`, README 「AI 와 일한 방법」 절, `docs/prompts/`(프롬프트 로그 : 코드와 같은 PR 에). 하네스 정본은 backend `docs/seungjo/harness.md` 한 곳
+- `#62` ⑤ 부분 개정 (`#11`, backend `#159` 에이전트 mTLS · ADR `#64`) : 입구(Traefik + NLB)에서 수집기 gRPC 통로를 뺀다. 바깥 에이전트는 안 받고 TLS 는 수집기가 직접 끝낸다(mTLS). 문서만. `docs/seungjo/9-eks-foundation/` README 표 E 행 · research 2.6
 - 1b EKS 배포 기반 결정 (`#9`, backend ADR `#62`). 서울 · 데이터 온디맨드 t3.large 1대(한 AZ) + 앱 Spot t3.large 2대 · 정해진 시간만 켬(발표 전 상시) · NAT 인스턴스(fck-nat) · Traefik + NLB · 공식 이미지 StatefulSet + EBS(Retain) · External Secrets · CI 가 GitHub App 토큰으로 `image.tag` 커밋 · 관리형 노드 그룹 고정. 월 약 $167 ~ 220. `docs/seungjo/9-eks-foundation/`
 
 ## 6. 지금 막혀 있는 것
