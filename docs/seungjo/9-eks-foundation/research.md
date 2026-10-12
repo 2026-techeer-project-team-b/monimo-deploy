@@ -77,7 +77,9 @@
 
 ### 2.6 인그레스 : Traefik + NLB 로 HTTP 와 gRPC 를 한 문에
 
-- 수집기는 gRPC(OTLP 4317), 화면 · API 는 HTTP. Traefik 은 백엔드로 `scheme: h2c` 를 주면 gRPC 를 그대로 넘긴다
+> **개정 (2026-10-13, backend `#159` · ADR `#64`)** : 아래 "수집기 gRPC 를 입구로" 는 **빠졌다.** 쇼핑몰은 클러스터 안에서 서비스 이름으로 수집기에 붙어 입구를 안 지나고, 입구에서 TLS 를 끝내면 수집기가 보는 상대 주소가 입구 주소가 되어 backend `#149` 가 깨진다. 바깥 에이전트는 받지 않기로 했고 TLS 는 수집기가 직접 끝낸다(mTLS). 입구는 화면 · API 의 HTTP 만 받는다. 원문은 지우지 않고 남긴다
+
+- 수집기는 gRPC(OTLP 4317), 화면 · API 는 HTTP. Traefik 은 백엔드로 `scheme: h2c` 를 주면 gRPC 를 그대로 넘긴다 (개정으로 빠짐 : 위 인용)
 - NLB 는 L4(연결 단위 분산). TLS 를 Traefik 에서 끝내면 한 입구가 ALPN 으로 HTTP 와 gRPC 를 같이 받는다(추정, 첫 기동 때 확인)
 - 주의 : NLB TCP 유휴 타임아웃 기본 350초. 오래 열어 두는 gRPC 연결은 keepalive 필요. 인증서는 cert-manager HTTP-01(80 포트 열림 필요)
 - NLB 는 끌 수 없다. 스케줄로 끄려면 Service 를 지웠다 다시 만들어야 하고 그때마다 DNS 이름이 바뀐다 → **24시간 유지**
@@ -117,7 +119,7 @@
 
 - 데이터는 노드 밖(EBS · RDS)에 있으므로 노드는 켜고 끄는 대상이다. 끌 수 없는 고정비는 EKS $73 · NLB 약 $28 · NAT 인스턴스 약 $7.5 · 디스크다
 - 상태 있는 것(Kafka · ClickHouse)만 온디맨드 · 한 AZ, 나머지는 Spot
-- 문은 Traefik + NLB 하나로 HTTP 와 gRPC 를 같이 받는다
+- 문은 Traefik + NLB 하나로 HTTP 와 gRPC 를 같이 받는다 (개정 : gRPC 는 빠졌다, 2.6 인용. backend `#159`)
 - 공식 이미지로 StatefulSet 을 직접 만든다(Bitnami 이미지 업데이트 중단)
 - 비밀은 Secrets Manager → ESO, 태그는 CI → GitHub App 토큰 → deploy 레포 커밋
 

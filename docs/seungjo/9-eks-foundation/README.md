@@ -20,13 +20,14 @@
 | B | 노드 | 데이터 온디맨드 t3.large 1대(한 AZ) + 앱 Spot t3.large 2대 | Spot 만 : 데이터가 같이 회수됨 · 온디맨드만 : 비쌈 |
 | C | 켜는 시간 | 정해진 시간만 (ASG 예약 작업), 발표 전엔 상시 | 24시간 : 노드 비용 그대로 |
 | D | 나가는 길 | NAT 인스턴스 fck-nat t4g.nano (월 약 $7.5) | NAT 게이트웨이 : 월 약 $43 + 데이터비 · 공개 서브넷 : 노드 노출 |
-| E | 들어오는 문 | Traefik + NLB, cert-manager | ALB : gRPC 설정 추가 · AWS 에 묶임 |
+| E | 들어오는 문 | Traefik + NLB, cert-manager. **개정(backend `#159` · ADR `#64`) : 수집기 gRPC 통로는 입구에 두지 않는다.** 화면 · API 의 HTTP 만 받는다 | ALB : gRPC 설정 추가 · AWS 에 묶임 |
 | F | Kafka · ClickHouse | 공식 이미지 StatefulSet + EBS(Retain) | Bitnami : 2025-08 무료 이미지 업데이트 중단 · 관리형 : 월 $100+ |
 | G | 비밀값 | Secrets Manager + External Secrets | CSI : 파일 마운트 · Terraform : state 평문 |
 | H | 이미지 태그 | CI 가 GitHub App 토큰으로 deploy 레포 커밋 | Image Updater : 도구 추가 · ADR 과 다름 |
 | I | 노드 수 | 관리형 노드 그룹 고정 | Karpenter : 1b 에 과함 |
 
 - **월 비용** : 정해진 시간(평일 약 220시간)만 켜면 약 $167, 데이터 노드 24시간이면 약 $220. 끌 수 없는 고정비는 EKS $73 · NLB 약 $28 · NAT 인스턴스 약 $7.5
+- **개정 (2026-10-13, backend `#159` 에이전트 mTLS · ADR `#64`)** : E 에서 "수집기 gRPC(h2c)" 를 뺀다. 쇼핑몰은 클러스터 안에서 서비스 이름으로 수집기에 붙어 입구를 안 지나므로 입구의 인증은 안쪽 공격을 못 막고, 입구에서 TLS 를 끝내면 수집기가 보는 상대 주소가 입구 주소가 되어 backend `#149`(파드 명부 주소)가 깨진다. 그래서 **바깥 에이전트를 받지 않기로** 했고 TLS 는 수집기가 직접 끝낸다(mTLS, 손님 신분증 도장 검사). 입구는 HTTP 만 받아 설정이 가벼워지고 NLB 는 화면 · API 때문에 그대로 필요하다. 바깥 에이전트를 받기로 하면 그때 입구 쪽을 다시 본다(ADR `#64` 되돌림 ①)
 - **되돌리는 조건** : Terraform 첫 apply 가 이틀 넘게 막히면 eksctl 로 내린다(`#44` 의 "첫 주" 를 일정 때문에 당김). Spot 을 계속 못 받으면 앱도 온디맨드(+ 약 $30). 데이터 노드 AZ 에 문제가 생기면 그 AZ 로 노드를 다시 띄운다
 
 결정 원문은 [`research.md`](research.md) 8 절과 [`prompts.md`](prompts.md).
