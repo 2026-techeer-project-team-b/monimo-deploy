@@ -4,6 +4,7 @@
 > 일정 근거는 [`docs/seungjo/9-eks-foundation/README.md`](seungjo/9-eks-foundation/README.md) 「다음」, 결정은 backend ADR `#62` · `#66`.
 
 - 갱신 2026-10-16 · 담당 승조 `@SeungJo-02` · 발표 10/31
+- 1단계 방식은 정해졌다 : **생 YAML + kustomize overlay** · **로컬 빌드 태그 + `IfNotPresent`**
 
 ## 지금 어디인가
 
@@ -16,7 +17,7 @@
 | 단계 | 어디 | 무엇 | 선행 | 완료 조건 | 이슈 | 상태 |
 |---|---|---|---|---|---|---|
 | 1 | 로컬 | 매니페스트 작성 + `kubectl apply` : 네임스페이스 셋 · 인프라 셋 · 일회성 Job 넷 · 수집기 · 적재 처리기 | 없음 | Job 넷 성공 종료 · 파드 Ready · 관리 포트 `/readyz` 200 · 신호가 ClickHouse 까지 도달 · README 로컬 절 채움 | `#14` | 다음 |
-| 2 | 로컬 | 환경 분기 : 로컬 태그와 레지스트리 태그를 한 벌의 매니페스트에서 가른다 (overlay 또는 values) | 1 | 같은 매니페스트로 로컬과 EKS 를 둘 다 설명할 수 있다 | `#14` 안 또는 별 이슈 | 대기 |
+| 2 | 로컬 | 환경 분기 : `overlays/local` · `overlays/eks` 가 이미지 줄을 갈아끼운다 (kustomize, 2026-10-16 확정) | 1 | 같은 base 로 로컬과 EKS 를 둘 다 설명할 수 있다 | `#14` 안 또는 별 이슈 | 대기 |
 | 3 | 로컬 | ArgoCD 올려 manual sync 로 연습 (App of Apps · sync 실패 읽기 · prune 영향) | 2 | 매니페스트를 고치면 로컬 클러스터가 따라온다 | 별 이슈 | 대기 |
 | 4 | AWS | Terraform 으로 VPC · NAT 인스턴스 · EKS 만 (10/20~23, 첫 apply 22~23) | 없음 (1~3 과 병행 가능) | `kubectl get nodes` 가 선다 | 별 이슈 | 대기 |
 | 5 | AWS | CI → ECR 푸시(OIDC) + CI 가 deploy 레포 매니페스트 태그를 커밋 | 4 · GitHub App(완료) | 머지 한 번에 ECR 태그가 생기고 이 레포에 커밋이 들어온다 | 별 이슈 (shop · backend 쪽도 같이) | 대기 |
@@ -27,17 +28,21 @@
 - 4단계는 1~3 과 **병행**할 수 있다 : 클러스터가 뜨는 것을 기다리며 로컬에서 매니페스트를 마무리한다
 - 데모 비상 대책 : EKS 가 끝내 안 되면 1~3 으로 로컬에서 찍는다 (`AGENTS.md` 6절)
 
-## 1단계 전에 닫을 질문 둘
+## 1단계 전에 정한 것 둘 (2026-10-16 확정)
 
-- **생 YAML 로 먼저 쓸지 Helm 공통 차트부터 쓸지**
-  - 생 YAML : 지금 바로 쓸 수 있고 읽기 쉽다. 모듈이 다섯이라 같은 내용이 다섯 번 복사된다
-  - Helm : 값만 바꿔 다섯을 찍어낸다. 템플릿 문법이 하나 더 들어오고 처음 한 번이 느리다
-  - 판단 기준 : 2단계(환경 분기)를 무엇으로 할 것인가와 묶여 있다. kustomize overlay 로 가면 생 YAML 이 자연스럽고, values 로 가면 Helm 이 자연스럽다
-- **로컬에서 이미지를 어떻게 먹일지**
-  - 로컬 빌드 태그(`monimo/collector:dev`) + `imagePullPolicy: IfNotPresent` 또는 `Never` : 레지스트리가 필요 없다. 태그가 고정이라 되돌리기가 약하다
-  - 커밋 SHA 태그로 로컬도 빌드 : 운영과 같은 규칙이 된다. 매번 태그가 바뀌어 손이 더 간다
-  - 판단 기준 : 5단계에서 쓸 태그 규칙(불변 태그 권장)과 어긋나지 않게 고른다. `latest` 는 ArgoCD 가 변경을 못 보므로 쓰지 않는다
-- 나머지 두 개는 1단계 안에서 정한다 : 인프라를 우리 차트로 쓸지 공개 차트를 쓸지 · 쇼핑몰까지 같이 올릴지
+- **매니페스트는 생 YAML 로 쓰고 환경 분기는 kustomize overlay 로 한다**
+  - `base` 에 공통을 두고 `overlays/local` · `overlays/eks` 가 이미지 줄만 갈아끼운다
+  - Helm 을 안 쓴 이유 : 템플릿 문법이 하나 더 들어오고 처음 한 번이 느리다. 모듈이 다섯이라 복사가 생기지만 overlay 로 덮는 범위가 작다
+  - 되돌림 : 같은 내용이 다섯 번 복사되는 것이 손에 걸리면 공통 차트로 올린다
+- **로컬 이미지는 로컬 빌드 태그 + `imagePullPolicy: IfNotPresent`**
+  - 태그는 compose 가 쓰는 것과 같게 둔다 : `monimo/collector:dev` · `monimo/ingester:dev`
+  - Docker Desktop 은 로컬 빌드 이미지를 클러스터가 그대로 본다 (push · load 가 필요 없다)
+  - `Never` 가 아닌 이유 : 이미지가 없을 때 `ErrImageNeverPull` 로만 알려 원인이 애매하고, 인프라 공식 이미지(kafka · clickhouse · postgres)는 당겨와야 해서 정책을 파드마다 갈라야 한다. `IfNotPresent` 하나로 둘을 다 설명한다
+  - **ECR 은 로컬에 두지 않는다** : AWS 리소스라 5단계에서 처음 등장하고, 운영 태그는 커밋 SHA 같은 불변 태그다. `latest` 는 쓰지 않는다 (ArgoCD 가 변경을 못 본다)
+  - 알고 쓰는 함정 : 같은 태그를 다시 빌드해도 파드가 안 바뀐다. 고친 뒤 `kubectl rollout restart` 를 쳐야 하고 그 두 줄을 README 로컬 절에 적는다 (compose `--build` 함정과 같은 모양, backend `#135` 선례)
+  - 확인 한 번 : Docker Desktop 의 containerd 이미지 저장소 설정에 따라 로컬 빌드 이미지가 안 보일 수 있다. 1단계에서 파드 하나로 먼저 확인하고, 안 보이면 로컬 레지스트리로 내린다
+  - 되돌림 : kind · minikube 로 옮기면 로컬 레지스트리 컨테이너로 · 로컬에서도 「어느 커밋이 떠 있나」를 자주 묻게 되면 커밋 SHA 태그로
+- 1단계 안에서 정할 것 둘은 남아 있다 : 인프라를 우리 차트로 쓸지 공개 차트를 쓸지 · 쇼핑몰까지 같이 올릴지
 
 ## 이미 정해져 있는 것 (다시 정하지 않는다)
 
