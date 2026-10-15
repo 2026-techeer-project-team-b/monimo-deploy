@@ -10,6 +10,7 @@
 | 무엇 | 정본 |
 |---|---|
 | 설계 결정(ADR) | `monimo-backend` 레포 `docs/design/01-decisions.md` |
+| 1b 배포 순서 · 다음 할 일 | 이 레포 `docs/plan.md` |
 | 환경변수 이름 | 이 레포 `README.md` 와 `.env.example` |
 | PG 마이그레이션 · ClickHouse DDL | Phase 1a 동안은 `monimo-backend` 의 `db/` (1b 부터 이 레포 `schema/`, ADR `#49`) |
 
