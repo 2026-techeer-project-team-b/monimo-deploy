@@ -42,6 +42,8 @@ Phase 1a compose(`compose/`)용 (`.env.example` 참고). 1b 이후 EKS 비밀값
 
 ## 관련 문서
 
+- 1b 배포 순서와 다음 할 일 : [`docs/plan.md`](docs/plan.md)
+
 - [설계 문서 (결정 기록 원본)](https://github.com/2026-techeer-project-team-b/monimo-backend/tree/HEAD/docs/design): monimo-backend 레포의 `docs/design/`
 - [레포별 파일 구성](https://app.notion.com/p/3e1d7d6851ff80a8a110e8aea0b5783b)
 - [깃허브 레포지토리 규칙](https://app.notion.com/p/3dcd7d6851ff8000b795f1cc609124e6)
