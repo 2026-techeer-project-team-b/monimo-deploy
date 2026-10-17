@@ -1,0 +1,34 @@
+# 관통 확인용 가짜 발신기 (research.md 5.4). backend scripts/check-pipeline.sh 와 같은 도구 · 같은 버전 · 같은 양(신호마다 3개)
+# 스팬 → 지표 → 로그 순서로 한 번씩 쏘고 끝난다. 수집기와 같은 네임스페이스라 collector:4317 = 서버 인증서 이름 그대로
+# 서비스 이름이 등록돼 있지 않아 agents 에는 안 들어간다 (backend #66). 점검은 spans · metrics_raw · logs 줄 수로 본다
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: telemetrygen
+  labels:
+    app.kubernetes.io/name: telemetrygen
+    app.kubernetes.io/part-of: monimo-check
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: telemetrygen
+        app.kubernetes.io/part-of: monimo-check
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      initContainers:
+        - name: traces
+          image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.161.0
+          imagePullPolicy: IfNotPresent
+          args: ["traces", "--otlp-endpoint", "collector:4317", "--otlp-insecure", "--traces", "3"]
+        - name: metrics
+          image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.161.0
+          imagePullPolicy: IfNotPresent
+          args: ["metrics", "--otlp-endpoint", "collector:4317", "--otlp-insecure", "--metrics", "3"]
+      containers:
+        - name: logs
+          image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.161.0
+          imagePullPolicy: IfNotPresent
+          args: ["logs", "--otlp-endpoint", "collector:4317", "--otlp-insecure", "--logs", "3"]

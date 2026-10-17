@@ -17,10 +17,10 @@
 
 | 단계 | 어디 | 무엇 | 선행 | 완료 조건 | 이슈 | 상태 |
 |---|---|---|---|---|---|---|
-| 1 | 로컬 | 매니페스트 작성 + `kubectl apply` : 네임스페이스 셋 · 인프라 셋 · 일회성 Job 넷 · 수집기 · 적재 처리기 (10/18~24) | 없음 | Job 넷 성공 종료 · 파드 Ready · 관리 포트 `/readyz` 200 · 신호가 ClickHouse 까지 도달 · README 로컬 절 채움 | `#14` | 다음 |
+| 1 | 로컬 | 매니페스트 작성 + `kubectl apply` : 네임스페이스 셋 · 인프라 셋 · 일회성 Job 셋 + 인증서 단계 · 수집기 · 적재 처리기 (10/18~24) | 없음 | Job 셋 성공 종료 · 파드 Ready · 업무 포트 `/readyz` 200 · 신호가 ClickHouse 까지 도달 · README 로컬 절 채움 | `#14` | 다음 |
 | 2 | 로컬 | 환경 분기 : `overlays/local` · `overlays/eks` 가 이미지 줄을 갈아끼운다 (kustomize, 2026-10-16 확정) | 1 | 같은 base 로 로컬과 EKS 를 둘 다 설명할 수 있다 | `#14` 안 또는 별 이슈 | 대기 |
 | 3 | 로컬 | ArgoCD 올려 manual sync 로 연습 (App of Apps · sync 실패 읽기 · prune 영향, 10/25~31) | 2 | 매니페스트를 고치면 로컬 클러스터가 따라온다 | 별 이슈 | 대기 |
-| 4 | AWS | Terraform 으로 VPC · NAT 인스턴스 · EKS 만 (10/20~27 작성, 첫 apply 그 사이) | 없음 (1~3 과 병행 가능) | `kubectl get nodes` 가 선다 | 별 이슈 | 대기 |
+| 4 | AWS | Terraform 으로 VPC · NAT 인스턴스 · EKS 만 (10/20~27 작성, 첫 apply 그 사이) | 없음 (1~3 과 병행 가능) | `kubectl get nodes` 가 선다 | `#17` | 대기 |
 | 5 | AWS | CI → ECR 푸시(OIDC) + CI 가 deploy 레포 매니페스트 태그를 커밋 (11/2~7) | 4 · GitHub App(완료) | 머지 한 번에 ECR 태그가 생기고 이 레포에 커밋이 들어온다 | 별 이슈 (shop · backend 쪽도 같이) | 대기 |
 | 6 | AWS | EKS 에 ArgoCD + 자동 sync · External Secrets (11/9~14) | 3 · 4 · 5 | 머지 → ECR → 매니페스트 커밋 → 클러스터 반영이 사람 손 없이 돈다 | 별 이슈 | 대기 |
 | 7 | — | 관통 · 안정화 · 데모 (11/16~20 관통과 안정화 · 11/21~22 촬영 · **11월 4주 발표**) | 6 | 쇼핑몰 요청이 화면까지 보이고 경보가 Slack 으로 간다 · **운영 샘플링 비율을 넣었다**(`shop` 1% · `monimo` 50%) | — | 대기 |

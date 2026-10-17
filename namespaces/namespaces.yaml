@@ -1,0 +1,24 @@
+# 네임스페이스 셋 (ADR #62). argocd 는 3단계(로컬 ArgoCD)에서 더한다
+#   data : 저장소 셋 (Kafka · ClickHouse · PostgreSQL) 과 그 준비 Job
+#   apm  : 우리 서비스 (이번엔 수집기 · 적재 처리기)
+#   shop : 쇼핑몰 (이번엔 비어 있다, #14 범위 밖)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data
+  labels:
+    app.kubernetes.io/part-of: monimo
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apm
+  labels:
+    app.kubernetes.io/part-of: monimo
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  labels:
+    app.kubernetes.io/part-of: monimo

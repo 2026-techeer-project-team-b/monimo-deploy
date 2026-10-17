@@ -222,6 +222,9 @@ ADR `#66` ① 이 "손으로 시작" 으로 정했으니 **자동 장치는 안 
 - **5.6 : ㄱ 우리 YAML** (2026-10-17, 승조 : 「Yaml (이걸로) · 백업, 스케일링등 직접 해야하지만 지금은 한 대씩이라 가장 맞는 선택인듯」)
   - 공개 차트를 안 고른 이유 : kustomize 에 Helm 이 섞여 도구가 둘이 되고, 셋이 저마다 사용법이 다르고, Bitnami 가 무료 이미지 업데이트를 끊었다(ADR `#62` F)
   - 오퍼레이터를 안 고른 이유 : 1b 에 과하다
+- **7절 「구현 전에 짚을 것 둘」** (2026-10-17, 승조 : 「추천방향으로 진행」 · 선택지는 바탕화면 가이드 1-A · 1-B)
+  - 마이그레이션 SQL : **스크립트가 backend `db/` 를 읽어 ConfigMap 으로 넣는다**. 레포에 SQL 이 안 남는다(`AGENTS.md` §2). EKS 는 5단계에서 CI 가 마이그레이션 이미지에 SQL 을 굽는 쪽으로 옮긴다
+  - 인증서 : **스크립트가 compose 와 같은 `monimo/otlp-certs:dev` 로 만들어 Secret 으로 넣는다**. 수집기는 Secret 을 `/certs` 파일로 건다 = EKS External Secrets 와 같은 모양. 그래서 준비 Job 은 넷이 아니라 **셋 + 인증서 단계**다
 
 ---
 
@@ -342,4 +345,69 @@ telemetrygen 은 등록 안 된 서비스라 agents 에는 안 들어가는 거 
 
 ## 9. 프롬프트를 가지고 실제 구현
 
-<!-- 구현 뒤에 쓴다 -->
+2026-10-17 · Docker Desktop 쿠버네티스 `v1.34.1` · backend 로컬 작업 폴더(`develop`, origin 보다 6 커밋 뒤)의 `db/` · `certs/` · `monimo/*:dev` 이미지
+
+### 만든 것
+
+- base : `namespaces/` · `infra/{kafka,clickhouse,postgres,kafka-init}` · `schema/{postgres-migrate,clickhouse-migrate}` · `apps/{collector,ingester}` · `checks/telemetrygen`
+- 넣는 곳 : `overlays/local/{0-namespaces,1-infra,2-jobs,3-apps,4-checks}` · `overlays/eks/{0~3}`(자리만, 채울 것은 각 파일 주석)
+- `scripts/up-local.sh` (올리기 + 관통 확인 · `--down`)
+
+### 돌린 결과
+
+| 몇 번째 | 상태 | 결과 | 걸린 시간 |
+|---|---|---|---|
+| 1 | 빈 클러스터, 공식 이미지 처음 받음 | 끝까지 통과 : Job 셋 성공 · 앱 둘 Ready · `/readyz` 200 둘 · spans 0 → 6 · metrics_raw 0 → 659 · logs 0 → 108 | (이미지 받기 포함, 안 잼) |
+| 2 | 다 떠 있는 채로 다시 | 통과 (Job 은 지우고 새로 돌림, 나머지는 그대로) | 25초 |
+| 3 | `--down` 뒤 빈 클러스터 (이미지는 있음) | 통과 | 50초 |
+| 음성 | `BACKEND_DIR=/nope` · `KUBE_CONTEXT=nope` | 둘 다 준비 단계에서 `✗` 한 줄로 멈춤 | 즉시 |
+
+### 실행하다 찾아서 고친 것
+
+- **관통 확인이 telemetrygen 없이도 통과할 수 있었다**
+  - 1번째 실행의 metrics_raw 659 · logs 108 은 telemetrygen 것이 아니었다 : 수집기 · 적재 처리기 자신의 에이전트가 같은 수집기(`collector:4317`)로 보낸 것이다 (자기 감시, backend `#208`. 이미지 안 에이전트 설정이 클러스터 안에서도 그대로 닿았다)
+  - logs 108 줄 중 telemetrygen 은 3 줄 (monimo-collector 43 · monimo-ingester 63)
+  - 그래서 셈을 `service_name = 'telemetrygen'` 으로 좁혔다. 2 · 3번째는 이 셈으로 3 → 6 · 0 → 3 처럼 telemetrygen 몫만 늘었다
+- **macOS 기본 bash 가 3.2 다** : 연관 배열(`declare -A`)이 없어 `before_<표>` 변수로 바꿨다
+
+### 리뷰 뒤 고친 것 (리뷰 서브에이전트 : 치명 0 · 높음 0 · 중간 4 · 낮음 9, 「머지 가능」)
+
+| 짚은 것 | 고친 것 |
+|---|---|
+| (중간) `/readyz` 확인 · 줄 수 조회가 한 번 실패하면 `set -e` 로 말없이 끝난다 | 실패를 받아 `✗` 한 줄로 알리고, 줄 수는 다시 시도한다 |
+| (중간) `kubectl wait --for=condition=complete` 는 Job 이 이미 실패해도 제한 시간 끝까지 기다린다 | 성공 · `Failed` 조건을 둘 다 보며 기다린다 |
+| (중간) base 이미지 이름 `monimo/collector` 는 overlay 가 안 채우면 Docker Hub 의 남의 `monimo/` 로 풀린다 | base 를 `monimo-local.invalid/...` 로 : 못 받는 주소라 바로 실패한다. overlay 가 `newName` · `newTag` 로 채운다 |
+| (중간) Kafka 로그 폴더가 볼륨 꼭대기라 EBS(ext4) 의 `lost+found` 에서 멈춘다 | `KAFKA_LOG_DIRS=/var/lib/kafka/data/logs` (PG 의 `PGDATA` 와 같은 이유) |
+| (낮음) `plan.md` 1단계 행이 「Job 넷」 · 「관리 포트」 | 고쳤다 |
+| (낮음) README 의 mTLS 켜기가 base 를 고치라고 했다 · 서버 인증서 이름 한계 · 자기 감시도 끊긴다는 말이 없다 | `kubectl set env` 로컬 실험으로 바꾸고 둘을 적었다 |
+| (낮음) 스크립트 환경변수가 README 에 없다 · 확인 대기 시간이 메시지의 두 배 · 모르는 인자로도 다 올린다 · `--down` 이 다른 클러스터에서도 된다 · 컨텍스트 이름을 정규식으로 본다 · 기본 비밀값이 왜 괜찮은지 설명이 없다 · 프롬프트 로그가 없다 | 전부 고쳤다 (README 표 · `$SECONDS` · 인자 검사 · `--down` 은 docker-desktop 만 · `grep -F` · 주석 · `prompts.md`) |
+| (열린 질문) ConfigMap 마운트의 숨은 폴더(`..data`)를 Flyway 가 두 번 읽을 수 있나 · 하위 폴더 파일 이름이 겹치면 | 지금은 15 · 9 개가 정확히 한 번씩 적용됐다. 이름이 겹치면 kubectl 이 멈춘다. 그대로 둔다 |
+
+리뷰 뒤 다시 돌린 것
+
+| 무엇 | 결과 |
+|---|---|
+| `--down` 뒤 처음부터 | 통과 · 50초 · Kafka 볼륨에 `logs/` 가 생겼다 |
+| 모르는 인자 `-down` | `✗ 모르는 인자` 로 바로 멈춤 |
+| 바로 실패하는 Job (`exit 1`, `backoffLimit 0`) 에 `wait_job` | **6초** 만에 `✗ 실패 (재시도 한도까지 다 썼다)` + 로그 |
+| 틀린 PG 비밀번호(`POSTGRES_PASSWORD=wrong`) | 300초 뒤 `✗ 끝나지 않았다` + `password authentication failed` 로그. 빨리 안 끝난 이유는 스크립트가 아니라 **Flyway 가 연결을 스스로 다시 시도**하기 때문이다(`FLYWAY_CONNECT_RETRIES=10`, compose 와 같은 값) : Job 이 아직 실패하지 않은 상태다. 줄이려면 그 값을 로컬에서 내리면 되지만 compose 와 같게 둔다 |
+| 기본값으로 다시 | 통과 · 26초 |
+
+### 「구현 때 확인」 셋 (2절 · 바탕화면 가이드)
+
+- **hostpath 크기** : PV 는 신청한 대로(5Gi · 2Gi · 1Gi) 만들어지지만 파드 안 `df` 는 노드 디스크 전체(377G)를 보인다. **미리 잡지도 않고 넘어도 막지 않는다** (2.2 의 짐작이 맞았다)
+- **회수 정책** : 기본 storageClass `hostpath` 는 `Delete`. `--down` 으로 네임스페이스를 지우자 PV 셋이 다 사라졌다 (`kubectl get pv` → `No resources found`)
+- **ClickHouse ulimit** : 파드 안 `ulimit -n` = 1048576. compose 의 262144 보다 커서 따로 안 잡아도 된다. EKS 노드에서 다시 본다
+
+### 생각과 달랐던 것
+
+- **`/readyz` 는 관리 포트가 아니라 업무 포트다** (이슈 본문 완료 조건이 「관리 포트 `/readyz` 200」이었다). backend `application.yml` 이 업무 포트(8081 · 8082)에 `/livez` · `/readyz` 를 연다(`add-additional-paths`). 이슈 본문을 고쳤다
+- **준비 Job 은 넷이 아니라 셋 + 인증서 단계다** (6절 1-B). 이슈 본문을 고쳤다
+- Kafka 는 `enableServiceLinks: false` 가 필요하다 : 안 끄면 쿠버네티스가 `KAFKA_PORT=tcp://...` 를 넣고 공식 이미지가 `KAFKA_*` 를 전부 설정으로 바꿔 기동이 깨진다. 처음부터 꺼서 실제로 깨지는 것은 안 봤다 (알려진 함정이라 미리 막았다)
+- `Warning: spec.SessionAffinity is ignored for headless services` 가 한 번 찍힌다. 우리가 적은 칸이 아니라 API 서버가 기본값을 넣으며 내는 경고라 그대로 둔다
+
+### 남은 것 (이 이슈 밖)
+
+- EKS 값 채우기(`overlays/eks/`) : 4~6단계. 마이그레이션 SQL 은 5단계에서 이미지에 굽는다 (`AGENTS.md` §6)
+- 쇼핑몰 · api-server · detector · notifier 를 쿠버네티스에 : 별 이슈
+- TLS 를 켠 관통(`optional` · `require`) : `telemetrygen` 이 평문이라 `require` 에서는 끊긴다. 켜서 돌려 보지는 않았다

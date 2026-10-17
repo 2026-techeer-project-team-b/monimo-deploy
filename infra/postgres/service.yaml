@@ -1,0 +1,15 @@
+# Headless Service : postgres-0.postgres.data.svc.cluster.local · 한 대라 postgres.data.svc.cluster.local 로도 닿는다
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: monimo-infra
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432

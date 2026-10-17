@@ -1,0 +1,108 @@
+# 수집기. 상태가 없어 Deployment (파드 이름이 바뀌어도 된다). 환경변수는 backend compose.yaml 의 collector 를 옮기고 주소만 바꿨다
+# 포트 : 4317 OTLP gRPC · 8081 업무 HTTP(/livez · /readyz · 명령 문) · 18081 관리(/actuator/**, 업무 포트 + 10000, ADR #61)
+# readiness 는 업무 포트의 /readyz 이고 저장소를 안 본다 (ADR #58 : PG 가 죽어도 수집은 돈다)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collector
+  labels:
+    app.kubernetes.io/name: collector
+    app.kubernetes.io/part-of: monimo-apm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: collector
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: collector
+        app.kubernetes.io/part-of: monimo-apm
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: collector
+          # base 이름은 일부러 어디서도 못 받는 주소다 : overlay 가 이미지 줄을 안 채우면 Docker Hub 의 남의 monimo/ 를 당기지 않고 바로 실패한다
+          image: monimo-local.invalid/collector
+          # 명시한다 : 비워 두면 태그가 latest 일 때 조용히 Always 가 된다 (research.md 2.3)
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: http
+              containerPort: 8081
+            - name: management
+              containerPort: 18081
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: { fieldPath: metadata.name }
+            - name: SPRING_PROFILES_ACTIVE
+              value: local
+            - name: POSTGRES_HOST
+              value: postgres.data.svc.cluster.local
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: POSTGRES_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: POSTGRES_PASSWORD }
+            - name: KAFKA_HOST
+              value: kafka-0.kafka.data.svc.cluster.local
+            - name: KAFKA_PORT
+              value: "29092"
+            # PG 를 못 읽었을 때 쓸 기본값. 정본은 PG application_configs 이고 PG 가 이긴다 (ADR #53). 로컬은 1.0
+            - name: MONIMO_COLLECTOR_SAMPLING_RATIO
+              value: "1.0"
+            - name: MONIMO_COLLECTOR_HEALTH_CHECK_PATHS
+              value: /actuator/health,/livez,/readyz
+            - name: MONIMO_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef: { name: monimo-tokens, key: MONIMO_AGENT_TOKEN }
+            - name: MONIMO_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef: { name: monimo-tokens, key: MONIMO_INTERNAL_TOKEN }
+            # 명령의 reply_to. 한 대라 Service 주소 그대로
+            - name: MONIMO_COLLECTOR_ADVERTISED_URL
+              value: http://collector.apm.svc.cluster.local:8081
+            # 에이전트 mTLS (ADR #64). 기본 none(평문). 켜는 법은 README 로컬 절
+            - name: MONIMO_COLLECTOR_OTLP_GRPC_TLS_CLIENT_AUTH
+              value: none
+            - name: MONIMO_COLLECTOR_OTLP_GRPC_TLS_SERVER_CERTIFICATE
+              value: /certs/server.crt
+            - name: MONIMO_COLLECTOR_OTLP_GRPC_TLS_SERVER_KEY
+              value: /certs/server.key
+            - name: MONIMO_COLLECTOR_OTLP_GRPC_TLS_CA_CERTIFICATE
+              value: /certs/ca.crt
+            # 이름표는 파드 이름 그대로 (monimo-shop #30). compose 는 monimo-collector-local-1 로 고정이었다
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.instance.id=$(POD_NAME),deployment.environment.name=local
+            - name: LOGGING_LEVEL_ORG_HIBERNATE_SQL
+              value: info
+            - name: LOGGING_LEVEL_ORG_HIBERNATE_ORM_JDBC_BIND
+              value: info
+            - name: LOGGING_LEVEL_COM_MONIMO_COLLECTOR
+              value: info
+          # 기동이 20~60초라 startup 이 끝나야 liveness 를 본다
+          startupProbe:
+            httpGet: { path: /livez, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet: { path: /livez, port: http }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+      volumes:
+        # scripts/up-local.sh 가 넣는다 (EKS 는 External Secrets, ADR #66 ③). TLS 를 안 켜면 없어도 뜬다
+        - name: certs
+          secret:
+            secretName: otlp-certs-collector
+            optional: true

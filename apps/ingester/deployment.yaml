@@ -1,0 +1,84 @@
+# 적재 처리기. 상태가 없어 Deployment. 환경변수는 backend compose.yaml 의 ingester 를 옮기고 주소만 바꿨다
+# 포트 : 8082 업무(/livez · /readyz) · 18082 관리(/actuator/**, 업무 포트 + 10000)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingester
+  labels:
+    app.kubernetes.io/name: ingester
+    app.kubernetes.io/part-of: monimo-apm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingester
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingester
+        app.kubernetes.io/part-of: monimo-apm
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: ingester
+          # base 이름은 일부러 어디서도 못 받는 주소다 : overlay 가 이미지 줄을 안 채우면 Docker Hub 의 남의 monimo/ 를 당기지 않고 바로 실패한다
+          image: monimo-local.invalid/ingester
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8082
+            - name: management
+              containerPort: 18082
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: { fieldPath: metadata.name }
+            - name: SPRING_PROFILES_ACTIVE
+              value: local
+            - name: POSTGRES_HOST
+              value: postgres.data.svc.cluster.local
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: POSTGRES_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: POSTGRES_PASSWORD }
+            - name: KAFKA_HOST
+              value: kafka-0.kafka.data.svc.cluster.local
+            - name: KAFKA_PORT
+              value: "29092"
+            - name: CLICKHOUSE_HOST
+              value: clickhouse.data.svc.cluster.local
+            - name: CLICKHOUSE_HTTP_PORT
+              value: "8123"
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: CLICKHOUSE_USER }
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: CLICKHOUSE_PASSWORD }
+            # 적재 실패 때 버티는 시간 (ADR #51). compose 기본값 그대로
+            - name: MONIMO_INGESTER_RETRY_TRANSIENT_MAX_ELAPSED
+              value: 10m
+            - name: MONIMO_INGESTER_RETRY_UNKNOWN_MAX_ELAPSED
+              value: 1m
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.instance.id=$(POD_NAME),deployment.environment.name=local
+            - name: LOGGING_LEVEL_ORG_HIBERNATE_SQL
+              value: info
+            - name: LOGGING_LEVEL_ORG_HIBERNATE_ORM_JDBC_BIND
+              value: info
+            - name: LOGGING_LEVEL_COM_MONIMO_INGESTER
+              value: info
+          startupProbe:
+            httpGet: { path: /livez, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet: { path: /livez, port: http }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5

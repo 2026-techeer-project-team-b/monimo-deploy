@@ -1,0 +1,59 @@
+# ClickHouse 마이그레이션 (한 번 돌고 끝나는 Job, ADR #57). Flyway 설정은 backend compose.yaml 의 clickhouse-migrate 그대로
+# 이미지는 Flyway + ClickHouse 플러그인만 있고 SQL 은 없다 (backend db/clickhouse/Dockerfile).
+# SQL 은 scripts/up-local.sh 가 backend db/clickhouse 의 V*.sql 을 ConfigMap ch-migrations 로 넣는다
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: clickhouse-migrate
+  labels:
+    app.kubernetes.io/name: clickhouse-migrate
+    app.kubernetes.io/part-of: monimo-init
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse-migrate
+        app.kubernetes.io/part-of: monimo-init
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: flyway
+          # base 이름은 일부러 어디서도 못 받는 주소다 : overlay 가 이미지 줄을 안 채우면 Docker Hub 의 남의 monimo/ 를 당기지 않고 바로 실패한다
+          image: monimo-local.invalid/clickhouse-migrate
+          imagePullPolicy: IfNotPresent
+          args: ["migrate"]
+          env:
+            # 붙는 곳은 default(빈 서버에도 늘 있다)이고, 일하는 곳과 장부 자리는 monimo 다
+            - name: FLYWAY_URL
+              value: jdbc:clickhouse://clickhouse.data.svc.cluster.local:8123/default
+            - name: FLYWAY_USER
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: CLICKHOUSE_USER }
+            - name: FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: CLICKHOUSE_PASSWORD }
+            - name: FLYWAY_SCHEMAS
+              value: monimo
+            - name: FLYWAY_LOCATIONS
+              value: filesystem:/flyway/sql
+            - name: FLYWAY_VALIDATE_MIGRATION_NAMING
+              value: "true"
+            - name: FLYWAY_OUT_OF_ORDER
+              value: "true"
+            - name: FLYWAY_CONNECT_RETRIES
+              value: "10"
+            - name: FLYWAY_BASELINE_ON_MIGRATE
+              value: "true"
+            # clean 이 한 번 돌면 신호 데이터가 전부 날아간다. 기본값에 맡기지 않고 못박는다
+            - name: FLYWAY_CLEAN_DISABLED
+              value: "true"
+          volumeMounts:
+            - name: sql
+              mountPath: /flyway/sql
+              readOnly: true
+      volumes:
+        - name: sql
+          configMap:
+            name: ch-migrations
