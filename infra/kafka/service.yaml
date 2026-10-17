@@ -1,0 +1,19 @@
+# Headless Service : 파드마다 고정 주소(kafka-0.kafka.data.svc.cluster.local)를 준다. 광고 주소가 이 이름이다
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: monimo-infra
+spec:
+  clusterIP: None
+  # 파드가 Ready 전이어도 이름을 풀어 준다 : 브로커가 자기 광고 주소를 찾을 수 있게
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: kafka
+  ports:
+    - name: internal
+      port: 29092
+    - name: controller
+      port: 9093

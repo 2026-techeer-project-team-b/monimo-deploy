@@ -1,0 +1,53 @@
+# PostgreSQL 마이그레이션 (한 번 돌고 끝나는 Job, ADR #49). Flyway 설정은 backend compose.yaml 의 postgres-migrate 그대로
+# SQL 은 이 레포에 없다 (AGENTS.md §2 : 스키마 파일은 1a 동안 여기 두지 않는다).
+# 로컬은 scripts/up-local.sh 가 backend db/postgres 의 V*.sql 을 ConfigMap pg-migrations 로 넣고 여기서 /flyway/sql 로 건다.
+# 하위 폴더(alert/ · config/ …)는 평평해지지만 Flyway 는 파일 이름(버전)만 보므로 같다. EKS 는 5단계에서 이미지에 굽는 쪽으로 옮긴다
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-migrate
+  labels:
+    app.kubernetes.io/name: postgres-migrate
+    app.kubernetes.io/part-of: monimo-init
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-migrate
+        app.kubernetes.io/part-of: monimo-init
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: flyway
+          image: flyway/flyway:11.7.2-alpine
+          imagePullPolicy: IfNotPresent
+          args: ["migrate"]
+          env:
+            - name: FLYWAY_URL
+              value: jdbc:postgresql://postgres.data.svc.cluster.local:5432/monimo
+            - name: FLYWAY_USER
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: POSTGRES_USER }
+            - name: FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: POSTGRES_PASSWORD }
+            - name: FLYWAY_LOCATIONS
+              value: filesystem:/flyway/sql
+            # 이름 규칙에 안 맞는 파일을 조용히 건너뛰지 않고 실패시킨다
+            - name: FLYWAY_VALIDATE_MIGRATION_NAMING
+              value: "true"
+            # 번호(만든 시각)와 머지 순서가 달라도 늦게 들어온 파일을 적용한다
+            - name: FLYWAY_OUT_OF_ORDER
+              value: "true"
+            - name: FLYWAY_CONNECT_RETRIES
+              value: "10"
+          volumeMounts:
+            - name: sql
+              mountPath: /flyway/sql
+              readOnly: true
+      volumes:
+        - name: sql
+          configMap:
+            name: pg-migrations

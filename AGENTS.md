@@ -18,25 +18,30 @@
 
 설정 레포다. 여기 적힌 내용이 "클러스터가 이래야 한다"는 정답지이고, Argo CD 가 클러스터를 이 레포에 맞춘다 (GitOps). 애플리케이션 코드는 없다.
 
-Helm · Argo CD · YAML.
+생 YAML + kustomize overlay · Argo CD. Helm 은 쓰지 않는다 (`docs/plan.md` 「1단계 전에 정한 것」, 2026-10-16 : 다섯 번 복사가 손에 걸리면 공통 차트로 올린다).
+
+위 폴더들이 **base**(로컬과 EKS 에 똑같은 것)이고, 클러스터에 넣는 곳은 `overlays/` 다. overlay 가 base 를 가져와 환경마다 다른 것(이미지 줄 · 볼륨 크기 · 노드)만 덮어쓴다.
 
 | 폴더 | 하는 일 |
 |---|---|
-| `charts/` | 공통 차트 (서비스용 · 쇼핑몰용) |
-| `apps/` | 서비스별 values. **폴더 하나 = 배포 단위 하나** |
+| `namespaces/` | `data` · `apm` · `shop` (`argocd` 는 배포 도구가 설 때) |
+| `infra/` | 저장소 셋 StatefulSet + Headless Service (Kafka · ClickHouse · PostgreSQL) · 토픽 Job `kafka-init` |
+| `schema/` | 마이그레이션 Job (`postgres-migrate` · `clickhouse-migrate`). SQL 파일은 두지 않는다 (§2) |
+| `apps/` | 서비스 Deployment + Service. **폴더 하나 = 배포 단위 하나** |
+| `checks/` | 관통 확인 Job (`telemetrygen`) |
+| `overlays/local/` · `overlays/eks/` | 넣는 곳. 묶음 `0-namespaces` → `1-infra` → `2-jobs` → `3-apps` (→ `4-checks`) 순서로 넣는다 |
+| `scripts/` | `up-local.sh` : 묶음을 차례로 넣고 `kubectl wait` 로 기다리고 관통까지 확인한다 (로컬 전용) |
 | `argocd/` | AppProject · Application |
-| `infra/` | Kafka · ClickHouse · PostgreSQL · cert-manager |
-| `namespaces/` | shop · apm · data · argocd |
-| `schema/` | ClickHouse DDL · PG 마이그레이션 (1b 부터) |
+| `charts/` | 비어 있다 (Helm 으로 옮기게 되면) |
 | `compose/` | Phase 1a 단일 노드 docker-compose |
 
 ## 2. 깨면 안 되는 규칙
 
-- **비밀값은 레포에 올리지 않는다.** 레포는 퍼블릭이다. compose 는 `.env.example` 에 이름만, 1b 이후 EKS 비밀값은 AWS Secrets Manager 에 두고 values 에는 이름만 적는다.
+- **비밀값은 레포에 올리지 않는다.** 레포는 퍼블릭이다. compose 는 `.env.example` 에 이름만, 1b 이후 EKS 비밀값은 AWS Secrets Manager 에 두고 매니페스트에는 Secret 이름만 적는다. 로컬은 `scripts/up-local.sh` 가 Secret 을 넣는다.
 - **`image.tag` 는 CI 봇이 갱신하는 값이다.** 손으로 바꿀 때는 PR 설명에 이유를 적는다.
-- **`apps/` 는 폴더 하나가 배포 단위 하나다.** 한 폴더에 서비스 두 개의 values 를 섞지 않는다.
+- **`apps/` 는 폴더 하나가 배포 단위 하나다.** 한 폴더에 서비스 두 개의 매니페스트를 섞지 않는다.
 - **클러스터를 직접 고치지 않는다.** 바꿀 것은 이 레포에 PR 로 올린다. 직접 고친 내용은 Argo CD 가 되돌리거나, 레포와 어긋난 채 남는다.
-- **스키마 파일은 1a 동안 여기 두지 않는다.** 같은 파일이 두 레포에 있으면 어느 쪽이 맞는지 알 수 없다.
+- **스키마 파일은 1a 동안 여기 두지 않는다.** 같은 파일이 두 레포에 있으면 어느 쪽이 맞는지 알 수 없다. 로컬은 `up-local.sh` 가 backend `db/` 를 ConfigMap 으로 넣고, EKS 는 5단계에서 마이그레이션 이미지에 굽는다.
 
 ## 3. 작업 흐름
 
@@ -56,17 +61,19 @@ Helm · Argo CD · YAML.
 - CODEOWNERS (`#3`), develop 브랜치 전략 (`#4`), 설계 문서 링크를 `tree/HEAD` 로 (`#5`)
 - `AGENTS.md` · `CLAUDE.md`, README 「AI 와 일한 방법」 절, `docs/prompts/`(프롬프트 로그 : 코드와 같은 PR 에). 하네스 정본은 backend `docs/seungjo/harness.md` 한 곳
 - `#62` ⑤ 부분 개정 (`#11`, backend `#159` 에이전트 mTLS · ADR `#64`) : 입구(Traefik + NLB)에서 수집기 gRPC 통로를 뺀다. 바깥 에이전트는 안 받고 TLS 는 수집기가 직접 끝낸다(mTLS). 문서만. `docs/seungjo/9-eks-foundation/` README 표 E 행 · research 2.6
+- 로컬 쿠버네티스에 수집 경로 (`#14`, `docs/plan.md` 1단계). 생 YAML + kustomize overlay · 저장소 셋 StatefulSet(공식 이미지) · 준비 Job 셋 · 수집기 · 적재 처리기 · `telemetrygen` 관통 확인을 `scripts/up-local.sh` 하나로. 이미지는 로컬 빌드 태그 + `IfNotPresent`. SQL · 인증서 · 비밀값은 레포 밖(스크립트가 넣는다). `overlays/eks/` 는 자리만. `docs/seungjo/14-local-k8s-collect/research.md`
 - 1b EKS 배포 기반 결정 (`#9`, backend ADR `#62`). 서울 · 데이터 온디맨드 t3.large 1대(한 AZ) + 앱 Spot t3.large 2대 · 정해진 시간만 켬(발표 전 상시) · NAT 인스턴스(fck-nat) · Traefik + NLB · 공식 이미지 StatefulSet + EBS(Retain) · External Secrets · CI 가 GitHub App 토큰으로 `image.tag` 커밋 · 관리형 노드 그룹 고정. 월 약 $167 ~ 220. `docs/seungjo/9-eks-foundation/`
 
 ## 6. 지금 막혀 있는 것
 
 | 무엇 | 안 풀면 |
 |---|---|
-| 폴더 7개가 전부 비어 있다 (`.gitkeep` 만) | 배포할 수 없다. 서비스는 각자 레포의 compose 로만 뜬다 |
+| **~~폴더 7개가 전부 비어 있다~~ (`#14` 로 해소 : `namespaces` · `infra` · `schema` · `apps` 가 찼다. `argocd` · `charts` · `compose` 는 아직)** | 로컬 쿠버네티스에는 수집 경로가 선다. EKS 값(`overlays/eks/`)은 자리만 있다 |
 | `compose/` 단일 노드 compose 가 없다 | Phase 1a 를 한 서버에 올릴 방법이 없다 |
-| `README.md` 의 로컬 실행 · 포트가 "준비 중"이다 | 위 둘이 생기면 채운다 |
-| AWS 계정 · 결제 · 예산 알림, 도메인, deploy 레포에 커밋할 GitHub App 이 없다 | Terraform apply · cert-manager 인증서 · CI 태그 커밋이 막힌다. 10/17 까지 준비 (`#9` 일정) |
-| 발표 10/31 까지 일정이 압축돼 있다 (`#9` README 「다음」) | Terraform 이 이틀 넘게 막히면 eksctl 로 내린다. EKS 가 끝내 안 되면 로컬 k8s 로 데모를 찍는다 (10/24 까지 로컬 전체 관통) |
+| 로컬 쿠버네티스에 올라간 것은 수집 경로뿐이다 (쇼핑몰 · api-server · detector · notifier 없음) | 화면 · 경보까지의 관통은 아직 compose 로만 된다. `telemetrygen` 으로는 서버맵 · 파드 이름표를 못 본다 |
+| 마이그레이션 SQL 이 EKS 로 갈 길이 없다 | 로컬은 스크립트가 backend `db/` 를 ConfigMap 으로 넣지만 EKS 에는 그 폴더가 없다. 5단계(CI → ECR)에서 마이그레이션 이미지에 SQL 을 굽는다 (backend 쪽 Dockerfile) |
+| AWS 계정 · 결제 · 예산 알림, 도메인이 없다 (~~GitHub App~~ 은 2026-10-16 준비됨) | Terraform apply(`#17`) · cert-manager 인증서가 막힌다 |
+| 발표가 11월 4주로 밀렸다 (날짜 정본 `docs/plan.md`) | Terraform 이 이틀 넘게 막히면 eksctl 로 내린다. EKS 가 끝내 안 되면 로컬 k8s 로 데모를 찍는다 (`scripts/up-local.sh` 가 그 바닥이다) |
 
 ## 7. 참고
 

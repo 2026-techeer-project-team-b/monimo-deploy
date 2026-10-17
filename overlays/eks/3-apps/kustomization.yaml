@@ -1,0 +1,9 @@
+# EKS 앱 : 자리만 잡아 뒀다
+#   - 이미지 : ECR 주소 + 커밋 SHA 태그 (CI 봇이 이 파일의 images 줄을 커밋한다, ADR #62 H)
+#   - nodeSelector : 앱 Spot 노드 (ADR #62 B)
+#   - SPRING_PROFILES_ACTIVE · 샘플링 비율 : 5~7단계 (운영 shop 1% · monimo 50%, docs/plan.md)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../apps/collector
+  - ../../../apps/ingester

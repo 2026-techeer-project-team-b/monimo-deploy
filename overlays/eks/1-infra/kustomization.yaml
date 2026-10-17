@@ -1,0 +1,10 @@
+# EKS 저장소 셋 : 자리만 잡아 뒀다 (4~6단계에서 채운다)
+#   - storageClass : EBS gp3 · reclaimPolicy Retain (ADR #62 F)
+#   - nodeSelector : 데이터 온디맨드 노드 한 AZ (ADR #62 B)
+#   - 볼륨 크기 : base 값 (ClickHouse 50Gi). Kafka · PG 출발값은 그때 정한다
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../infra/kafka
+  - ../../../infra/clickhouse
+  - ../../../infra/postgres

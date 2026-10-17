@@ -1,0 +1,60 @@
+# ClickHouse 한 대. 공식 이미지 StatefulSet (ADR #62 F). 설정은 backend compose.yaml 의 clickhouse 를 옮겼다
+# 계정은 Secret monimo-db 에서 읽는다 (scripts/up-local.sh 가 넣는다, 레포에는 이름만)
+# compose 의 ulimits nofile 262144 는 파드에 그 칸이 없다. 노드 기본값으로 충분한지는 research.md 9절에 적었다
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/part-of: monimo-infra
+spec:
+  serviceName: clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clickhouse
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse
+        app.kubernetes.io/part-of: monimo-infra
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:26.8.10.6
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: native
+              containerPort: 9000
+          env:
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: CLICKHOUSE_USER }
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: monimo-db, key: CLICKHOUSE_PASSWORD }
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
+          # 서버가 살아 있나만 본다. 표를 만드는 일은 clickhouse-migrate 가 맡는다 (ADR #57)
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "clickhouse-client --user \"$CLICKHOUSE_USER\" --password \"$CLICKHOUSE_PASSWORD\" --query 'SELECT 1' | grep -q 1"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 30
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi      # backend 20-scope.md 「PVC 크기 근거」 출발값. 로컬은 overlays/local 이 줄인다

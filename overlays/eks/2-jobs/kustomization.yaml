@@ -1,0 +1,10 @@
+# EKS 준비 Job : 자리만 잡아 뒀다
+#   - 이미지 : ECR 주소 + 커밋 SHA 태그 (CI 봇이 커밋한다, ADR #62 H)
+#   - 마이그레이션 SQL : 5단계에서 이미지에 굽는다 (로컬의 ConfigMap 길은 여기서 안 쓴다)
+#   - 순서 : ArgoCD sync wave · hook 으로 옮긴다 (ADR #66 ②)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../infra/kafka-init
+  - ../../../schema/postgres-migrate
+  - ../../../schema/clickhouse-migrate

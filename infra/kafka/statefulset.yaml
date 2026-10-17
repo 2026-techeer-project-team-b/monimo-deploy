@@ -1,0 +1,91 @@
+# Kafka 한 대 (KRaft, 브로커 + 컨트롤러). 공식 이미지 StatefulSet (ADR #62 F). 설정은 backend compose.yaml 의 kafka 를 옮겼다
+# compose 와 다른 것 셋
+#   - EXTERNAL 리스너(내 컴퓨터 bootRun 용 localhost:19092)를 뺐다. 클러스터 안에서만 쓴다
+#   - 광고 주소가 kafka:29092 가 아니라 파드 고정 주소 kafka-0.kafka.data.svc.cluster.local:29092 다
+#   - compose 는 볼륨이 없어 끄면 토픽이 사라졌다. 여기는 PVC 를 붙인다 (ADR #62 F)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: monimo-infra
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        app.kubernetes.io/part-of: monimo-infra
+    spec:
+      # 이걸 끄지 않으면 쿠버네티스가 같은 네임스페이스 Service 이름으로 KAFKA_PORT=tcp://... 같은 환경변수를 넣는다.
+      # 공식 이미지는 KAFKA_* 환경변수를 전부 설정으로 바꾸므로 엉뚱한 설정(port=tcp://...)이 생겨 기동이 깨진다
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 1000          # 이미지 사용자 appuser(1000)가 볼륨에 쓸 수 있게
+      containers:
+        - name: kafka
+          image: apache/kafka:3.9.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: internal
+              containerPort: 29092
+            - name: controller
+              containerPort: 9093
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: broker,controller
+            # 한 대라 자기 자신이 투표자다. 파드 주소 대신 localhost 를 쓴다 : DNS 가 서기 전에도 컨트롤러가 뜬다
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: 1@localhost:9093
+            - name: KAFKA_LISTENERS
+              value: INTERNAL://:29092,CONTROLLER://:9093
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: INTERNAL://kafka-0.kafka.data.svc.cluster.local:29092
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: INTERNAL
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: CONTROLLER
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "0"
+            # 토픽은 kafka-init 이 정해진 설정으로만 만든다. 오타 난 토픽이 저절로 생기지 않게 막는다
+            - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+              value: "false"
+            # 볼륨 바로 아래가 아니라 한 칸 아래 : EBS(ext4) 볼륨 꼭대기에는 lost+found 가 있어 Kafka 가 그 폴더를 깨진 파티션으로 보고 멈춘다
+            # (PG 의 PGDATA 와 같은 이유. 로컬 hostpath 에서는 안 보이는 함정이다)
+            - name: KAFKA_LOG_DIRS
+              value: /var/lib/kafka/data/logs
+          # compose 헬스체크는 raw.dlq 토픽까지 봤지만 여기서는 브로커가 응답하는지만 본다 :
+          # 토픽은 다음 묶음(kafka-init)이 만드는데, 그 묶음은 이 파드가 Ready 가 돼야 넣는다
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list > /dev/null"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 15
+            failureThreshold: 30
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi      # EKS 출발값은 4~6단계에서 정한다. 로컬은 overlays/local 이 줄인다

@@ -1,0 +1,24 @@
+# 로컬(Docker Desktop) 저장소 셋. base 와 다른 것은 볼륨 크기 하나다
+# storageClass 는 비워 둔다 = 기본값 hostpath (회수 정책 Delete, 2026-10-17 실측). Retain 은 EKS 의 EBS storageClass 에 적는다
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../infra/kafka
+  - ../../../infra/clickhouse
+  - ../../../infra/postgres
+patches:
+  - target: { kind: StatefulSet, name: kafka }
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 2Gi
+  - target: { kind: StatefulSet, name: clickhouse }
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 5Gi
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 1Gi
