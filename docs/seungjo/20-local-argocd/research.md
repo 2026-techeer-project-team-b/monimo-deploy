@@ -519,6 +519,14 @@ base 고침                               StatefulSet 셋 volumeClaimTemplates �
   - `local-namespaces` OutOfSync, `shop` 은 `requiresPruning: true`
   - `argocd app sync local-namespaces --prune` → `shop … ignored (no prune)`, `shop` 은 그대로 Active. `Prune=false` 가 막았다. 앱은 OutOfSync 로 남는다 (지울 게 남아 있다는 표시)
 
+### 리뷰 반영 (별도 리뷰어, 승인 · 중간 1 · 낮음 5)
+
+- **자식 셋에 `retry`** (3번, 10초부터 두 배, 최대 2분) : automated 는 같은 커밋에서 실패한 sync 를 스스로 다시 하지 않는다. 준비 Job 하나가 늦게 실패하면 `local-apps` 가 멈춰 선다
+- **준비 Job 셋에 `activeDeadlineSeconds: 300`** (base) : ⑤ 처럼 끝나지 않는 Job 을 300초에 Failed 로 끊고, 위 retry 가 다시 돌린다. EKS 도 같이 받는다
+- `up-argocd.sh` 는 준비물(`local-prereqs.sh`)부터 : 이미지 · backend 폴더가 없으면 ArgoCD 를 깔기 전에 멈춘다
+- 문구 : 「자식 넷」 → 「자식 셋」, `--down` 은 CRD 같은 클러스터 단위 자원을 남긴다
+- 고친 뒤 빈 클러스터에서 다시 : `up-argocd.sh` 21초 → root sync 39초에 셋 다 Synced · Healthy · 앱 재시작 0 · `check-local.sh` 통과. `up-local.sh` 52초 통과
+
 ### 막힌 것 · 남은 것
 
 - **`targetRevision` 다섯 줄은 PR 에서 `develop` 으로 바꿨다**. 위 실측 · 연습은 전부 `feat/20-local-argocd` 로 읽은 것이다. `develop` 에는 머지 전까지 `argocd/` 가 없어서, `develop` 으로 읽는 sync 는 머지 뒤에 한 번 더 본다 (`up-argocd.sh --down` → `up-argocd.sh` → `argocd app sync root`)
