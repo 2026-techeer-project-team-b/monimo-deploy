@@ -29,4 +29,4 @@
 | 7절 ② 를 「hook 만 든 자식은 Job 이 끝나기 전에 Healthy 로 보일 수 있다」로 적었다. 실제는 Job 이 **아예 안 돌았다** (automated 는 OutOfSync 일 때만 sync 하는데 hook 만 든 자식은 처음부터 Synced) | 패치 없이 먼저 돌린 실측에서 `data` 에 Job 이 하나도 없는 것을 보고 찾았다. Job 셋을 `local-apps` 의 PreSync 로 옮겼다 |
 | 8절 프롬프트는 자식까지 전부 manual 이었다 : 그러면 root sync 가 자식마다 멈춰 선다 | 가이드를 쓰며 sync wave 가 자식 Healthy 를 기다리는 방식을 따라가다 찾았다. 승조에게 물어 정했다 |
 | StatefulSet 이 diff 없이 계속 OutOfSync | `#14` 매니페스트의 `volumeClaimTemplates` 에 `apiVersion` · `kind` 가 없었다. 클러스터 쪽 값을 직접 보고 찾았다 |
-| 실패한 PreSync 를 다시 할 길(`retry`)과 끝나지 않는 Job 의 한도(`activeDeadlineSeconds`)가 없었다 | 리뷰 서브에이전트가 찾았다 (승인 · 중간 1 · 낮음 5). 중간과 낮음 넷을 반영했다 |
+| 실패한 PreSync 를 다시 할 길(`retry`)과 끝나지 않는 Job 의 한도(`activeDeadlineSeconds`)가 없었다 | 리뷰 서브에이전트가 찾았다 (승인 · 중간 1 · 낮음 5). 중간 하나 · 낮음 다섯 다 반영했다 |
