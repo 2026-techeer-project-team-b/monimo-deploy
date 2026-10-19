@@ -438,4 +438,91 @@ sync 는 내가 UI 에서 누를 거
 
 ## 9. 프롬프트를 가지고 실제 구현
 
-<!-- 구현 뒤에 쓴다 -->
+> 2026-10-19 · Claude 가 8절 프롬프트와 바탕화면 가이드(승조 확인 : 「추천대로」)로 구현하고 실측했다. 숫자는 Docker Desktop 쿠버네티스 · ArgoCD `v3.5.5` · CLI `v3.4.2` 에서 잰 것이다
+
+### 프롬프트에서 바뀐 것 셋
+
+| 프롬프트 | 실제 | 왜 |
+|---|---|---|
+| 자식 넷 다 manual (`syncPolicy` 비움) | **root 만 manual, 자식은 automated** (prune · selfHeal 끔) | 전부 manual 이면 root 가 「자식 0 이 Healthy 가 될 때까지」 기다리는데 manual 자식은 누르기 전엔 Healthy 가 안 된다 : root sync 가 자식마다 멈춰 선다. 승조 확인 (가이드 ①) |
+| 자식 `2-jobs` (Job 셋, `Sync` hook) | **자식 `2-jobs` 를 없애고 Job 셋을 `local-apps` 의 `PreSync` hook 으로** | 아래 실측 ②. `local-apps` 가 `sources` 둘(`overlays/local/2-jobs` · `3-apps`)을 읽는다. overlay 는 그대로라 `up-local.sh` 길은 안 바뀐다 |
+| 관통 확인은 `PostSync` hook (6절 5.3) | **`scripts/check-local.sh`** | 「보내기 전 줄 수 → 보내기 → 늘었나」를 한 흐름으로 봐야 한다 (7절 ③, 가이드 ②) |
+
+### 만든 것
+
+```
+argocd/install/kustomization.yaml       v3.5.5 install.yaml URL + argocd-cm 패치
+argocd/install/argocd-cm-patch.yaml     Application 상태 판정 (공식 문서 그대로)
+argocd/root.yaml                        뿌리 · manual · argocd/apps/local
+argocd/apps/local/                      local-namespaces(wave 0) · local-infra(1) · local-apps(3)
+scripts/lib.sh                          공용 값 · 함수 (ok · fail · wait_rollout · wait_job · 컨텍스트 확인)
+scripts/local-prereqs.sh                예전 up-local.sh 0단계
+scripts/check-local.sh                  예전 up-local.sh 4단계
+scripts/up-argocd.sh                    ArgoCD 설치 → local-prereqs → root 넣기 → 들어가는 법 출력 (--down)
+base 주석                               네임스페이스 Prune=false · Job 셋 PreSync + BeforeHookCreation
+base 고침                               StatefulSet 셋 volumeClaimTemplates 에 apiVersion · kind (실측 ③)
+```
+
+- 번호표는 0 · 1 · 3 이다 (2 는 `local-apps` 안의 PreSync). 빈 번호는 `up-local.sh` 의 묶음 번호와 맞춰 두려고 남겼다
+
+### 실측
+
+- **① 상태 판정 패치 없이 root sync (11:00:49)**
+  - 6초 만에 자식 넷이 **한꺼번에** 생겼다. root 는 자식이 Healthy 인지 안 보고 다음 번호로 갔다 (2.4 · 가이드 0절 그대로)
+  - 수집기는 떴고 적재 처리기는 표 · 토픽이 없어 `CrashLoopBackOff`
+- **② hook 만 든 자식(`2-jobs`)은 Job 을 한 번도 안 돌렸다** (7절 ② 보다 나빴다)
+  - 7절 ② 는 「Job 이 끝나기 전에 Healthy 로 보일 수 있다」였는데 실제는 **Job 이 아예 안 생겼다**
+  - hook 은 「평소 자원」이 아니라서 Job 만 든 자식은 처음부터 `Synced · Healthy` 로 보인다. automated 는 **OutOfSync 일 때만** sync 하므로 hook 을 돌릴 sync 가 안 일어난다
+  - → Job 셋을 `local-apps` 의 `PreSync` 로 옮겼다. `local-apps` 는 Deployment 가 있어 처음엔 OutOfSync 라 스스로 sync 하고, 그 sync 의 맨 앞에서 Job 셋이 돈다
+- **③ StatefulSet 셋이 계속 OutOfSync** (diff 는 비어 보인다)
+  - `volumeClaimTemplates` 에 `apiVersion` · `kind` 를 안 적었는데 클러스터는 채워 넣어서 둘이 다르다고 본다
+  - base 에 두 줄을 적고 push → 다시 Synced. `kubectl apply` 길에는 영향 없다
+- **④ 패치 넣고 빈 클러스터에서 처음부터** (`up-argocd.sh --down` → `up-argocd.sh` → `argocd app sync root`)
+
+  | 시각 | 무엇 |
+  |---|---|
+  | `up-argocd.sh` | 21초 (ArgoCD 파드 일곱 Ready + local-prereqs + root 넣기) |
+  | t+3s | `local-namespaces` Synced · Healthy, `local-infra` Progressing |
+  | t+20s | `local-infra` Healthy → 그제야 `local-apps` 생김 · Job 셋 Running |
+  | t+29s | Job 셋 Complete → 수집기 · 적재 처리기 생김 |
+  | t+39s | 셋 다 Synced · Healthy |
+  | `check-local.sh` | spans 0 → 6 · metrics_raw 0 → 3 · logs 0 → 3 |
+
+  - 적재 처리기 재시작 0 : Job 이 앱보다 먼저 끝났다
+  - **root 자체의 sync 는 16초에 Succeeded 로 끝난다** : 마지막 번호(`local-apps`)를 만든 뒤에는 그 자식이 Healthy 가 될 때까지 기다리지 않는다. 「다 섰나」는 `argocd app list` 로 자식을 본다
+- **⑤ 한 번 걸린 것** : 첫 시도(③ 전)에 `postgres-migrate` 컨테이너가 Flyway 「Successfully applied 15 migrations」 뒤에도 Running 으로 남았다 (`docker top` 은 비어 있고 `exec` 는 「stopped state」). 파드를 지우니 Job 이 새 파드로 바로 성공했고, 다시 돌린 ④ 에서는 재현되지 않았다. Docker Desktop 쪽 이상으로 보고 기록만 한다. PreSync 는 Job 이 안 끝나면 앱을 안 넣으므로 이때 `local-apps` 는 `Running : waiting for completion of hook` 으로 멈춰 있었다
+- `up-local.sh` (나눈 뒤) : 빈 클러스터에서 52초 통과, 모르는 인자는 막힘
+
+### 연습 (전부 되돌렸다)
+
+- **push → sync** : 수집기 `LOGGING_LEVEL_COM_MONIMO_COLLECTOR` 를 `debug` 로 push (11:14:02)
+  - +201초 `local-apps` OutOfSync (ArgoCD 가 레포를 3분마다 본다, 웹훅 없음) → +211초 스스로 sync · 새 파드 → +221초 옛 파드 내려감
+  - PreSync 라 Job 셋도 같이 다시 돌았다 (셋 다 다시 돌려도 안전하다)
+  - 기다리기 싫으면 `argocd app get local-apps --refresh`
+- **root 는 manual 인지** : 자식 파일(`argocd/apps/local/1-infra.yaml`)에 `info` 한 줄을 넣어 push → root 새로고침
+  - root `OutOfSync`, `argocd app diff root` 에 그 세 줄이 보인다. 60초 동안 클러스터의 `local-infra` 에는 안 들어갔다
+  - `argocd app sync root` → 그제야 들어갔다 (`application.argoproj.io/local-infra configured`)
+- **sync 실패 ① 없는 이미지 태그** (수집기 `newTag: no-such-tag`)
+  - sync 자체는 **Succeeded** 다 : 매니페스트는 잘 들어갔고, 실패는 그 뒤 파드에서 난다
+  - 새 파드 `ErrImagePull` ↔ `ImagePullBackOff` 를 오가고 **옛 파드는 계속 떠 있다** (롤링 업데이트라 새 파드가 Ready 가 돼야 옛 것을 내린다). 수집은 안 끊긴다
+  - 앱 상태는 `Progressing` 으로 머물다가 **+609초에 `Degraded`** 가 됐다. Deployment 의 기다림 한도(`progressDeadlineSeconds` 기본 600초)를 넘겨 `ProgressDeadlineExceeded` 가 붙은 때다. 10분 동안은 「아직 뜨는 중」과 구분이 안 된다
+  - 원인은 이벤트에 있다 : `kubectl -n apm get events` → `Failed to pull image "monimo/collector:no-such-tag" … repository does not exist`. 로컬에 없는 태그라 `IfNotPresent` 여도 Docker Hub 로 받으러 갔다
+  - 되돌리고 push → 새로고침하니 Healthy, 실패한 ReplicaSet 의 파드는 내려갔다
+- **sync 실패 ② 매니페스트 문법 오류** (`overlays/local/1-infra/kustomization.yaml` 끝에 깨진 줄)
+  - `local-infra` 가 `Unknown` · 조건 `ComparisonError : kustomize build … failed … did not find expected '-' indicator`
+  - 클러스터는 그대로다 : 매니페스트를 못 만들면 아무것도 안 넣는다. 되돌리고 새로고침하니 Synced
+- **prune ① 자원 하나 빼기** (`apps/ingester/kustomization.yaml` 목차에서 `service.yaml` 을 뺌)
+  - `local-apps` 가 스스로 sync 했지만 Service 는 **그대로 있다** : `OutOfSync` · `requiresPruning: true` 표시만 (자식 automated 의 `prune: false`)
+  - `argocd app sync local-apps --prune` → `service/ingester … Pruned` 로 지워졌다
+  - 되돌리고 push → 새로고침하니 Service 가 다시 생겼다 (ClusterIP 는 새 값)
+- **prune ② 네임스페이스 빼기** (`namespaces.yaml` 에서 `shop` 을 뺌)
+  - `local-namespaces` OutOfSync, `shop` 은 `requiresPruning: true`
+  - `argocd app sync local-namespaces --prune` → `shop … ignored (no prune)`, `shop` 은 그대로 Active. `Prune=false` 가 막았다. 앱은 OutOfSync 로 남는다 (지울 게 남아 있다는 표시)
+
+### 막힌 것 · 남은 것
+
+- **`targetRevision` 다섯 줄은 PR 에서 `develop` 으로 바꿨다**. 위 실측 · 연습은 전부 `feat/20-local-argocd` 로 읽은 것이다. `develop` 에는 머지 전까지 `argocd/` 가 없어서, `develop` 으로 읽는 sync 는 머지 뒤에 한 번 더 본다 (`up-argocd.sh --down` → `up-argocd.sh` → `argocd app sync root`)
+
+- `argocd` CLI `v3.4.2` · 서버 `v3.5.5` : 로그인 · `app list` · `sync` · `diff` 다 됐다
+- ArgoCD 는 로컬에만 있다. EKS(6단계)는 자식 Application 을 새로 적고 자동 sync 를 켠다. 그때 레포 밖 준비물(Secret · SQL)을 스크립트 대신 External Secrets · 마이그레이션 이미지로 바꿔야 ArgoCD 혼자 선다
+- 같은 클러스터에 `up-local.sh` 와 `up-argocd.sh` 를 섞지 않는다 : ArgoCD 는 자기가 넣은 자원에 주석 `argocd.argoproj.io/tracking-id` 를 붙여 알아본다. `kubectl` 로 넣은 것은 그 표시가 없어 둘이 같은 자원을 번갈아 덮어쓰게 된다. 네임스페이스만은 일부러 둘 다 넣는다 (`local-prereqs.sh` 가 먼저, ArgoCD 가 받아서 표시를 붙인다)

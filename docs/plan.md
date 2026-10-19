@@ -3,15 +3,15 @@
 > **「다음 뭐 하지」를 여기서 읽는다.** 단계마다 선행 · 완료 조건 · 이슈를 적어 두고, 끝나면 상태만 고친다.
 > 일정 근거는 [`docs/seungjo/9-eks-foundation/README.md`](seungjo/9-eks-foundation/README.md) 「다음」, 결정은 backend ADR `#62` · `#66`.
 
-- 갱신 2026-10-17 · 담당 승조 `@SeungJo-02` · **발표 11월 4주(2026-11-23 ~ 27, 날짜 미정)**
+- 갱신 2026-10-19 · 담당 승조 `@SeungJo-02` · **발표 11월 4주(2026-11-23 ~ 27, 날짜 미정)**
 - 일정이 한 달 밀렸다 : `docs/seungjo/9-eks-foundation/README.md` 「다음」의 10/18~31 표는 그때의 기록이고 **날짜 정본은 이 파일**이다
 - 1단계 방식은 정해졌다 : **생 YAML + kustomize overlay** · **로컬 빌드 태그 + `IfNotPresent`**
 
 ## 지금 어디인가
 
-- 끝난 것 : 1b 기반 결정(`#9`) · 입구에서 수집기 gRPC 를 뺀 개정(`#11`) · **GitHub App 과 조직 시크릿 준비**(2026-10-16, 레포 간 매니페스트 수정용) · **1단계 로컬 매니페스트**(`#14`, 2026-10-17 : `scripts/up-local.sh` 한 줄로 빈 클러스터에서 관통까지 50초)
+- 끝난 것 : 1b 기반 결정(`#9`) · 입구에서 수집기 gRPC 를 뺀 개정(`#11`) · **GitHub App 과 조직 시크릿 준비**(2026-10-16, 레포 간 매니페스트 수정용) · **1단계 로컬 매니페스트**(`#14`, 2026-10-17 : `scripts/up-local.sh` 한 줄로 빈 클러스터에서 관통까지 50초) · **3단계 로컬 ArgoCD**(`#20`, 2026-10-19 : root sync 한 번에 약 40초로 셋 다 Synced · Healthy)
 - 하는 중 : 없음
-- 다음 : **4단계 Terraform**(`#17`) 과 **3단계 로컬 ArgoCD**(이슈 아직 없음) 를 병행
+- 다음 : **4단계 Terraform**(`#17`)
   - 2단계는 `#14` 가 자리를 깔았다 : `overlays/local` · `overlays/eks` 가 같은 base 를 가져다 쓴다. EKS 쪽 값(이미지 · storageClass · 노드)은 비어 있고 5 · 6단계에서 채운다
 
 ## 순서
@@ -20,7 +20,7 @@
 |---|---|---|---|---|---|---|
 | 1 | 로컬 | 매니페스트 작성 + `kubectl apply` : 네임스페이스 셋 · 인프라 셋 · 일회성 Job 셋 + 인증서 단계 · 수집기 · 적재 처리기 (10/18~24) | 없음 | Job 셋 성공 종료 · 파드 Ready · 업무 포트 `/readyz` 200 · 신호가 ClickHouse 까지 도달 · README 로컬 절 채움 | `#14` | **완료** (2026-10-17) |
 | 2 | 로컬 | 환경 분기 : `overlays/local` · `overlays/eks` 가 이미지 줄을 갈아끼운다 (kustomize, 2026-10-16 확정) | 1 | 같은 base 로 로컬과 EKS 를 둘 다 설명할 수 있다 | `#14` (자리) | 자리만 : EKS 값은 5 · 6단계 |
-| 3 | 로컬 | ArgoCD 올려 manual sync 로 연습 (App of Apps · sync 실패 읽기 · prune 영향, 10/25~31) | 2 | 매니페스트를 고치면 로컬 클러스터가 따라온다 | 별 이슈 | 대기 |
+| 3 | 로컬 | ArgoCD 올려 manual sync 로 연습 (App of Apps · sync 실패 읽기 · prune 영향, 10/25~31) | 2 | 매니페스트를 고치면 로컬 클러스터가 따라온다 | `#20` | **완료** (2026-10-19) : root 만 manual · 자식 automated, 결과는 `docs/seungjo/20-local-argocd/research.md` 9절 |
 | 4 | AWS | Terraform 으로 VPC · NAT 인스턴스 · EKS 만 (10/20~27 작성, 첫 apply 그 사이) | 없음 (1~3 과 병행 가능) | `kubectl get nodes` 가 선다 | `#17` | 대기 |
 | 5 | AWS | CI → ECR 푸시(OIDC) + CI 가 deploy 레포 매니페스트 태그를 커밋 (11/2~7) | 4 · GitHub App(완료) | 머지 한 번에 ECR 태그가 생기고 이 레포에 커밋이 들어온다 | 별 이슈 (shop · backend 쪽도 같이) | 대기 |
 | 6 | AWS | EKS 에 ArgoCD + 자동 sync · External Secrets (11/9~14) | 3 · 4 · 5 | 머지 → ECR → 매니페스트 커밋 → 클러스터 반영이 사람 손 없이 돈다 | 별 이슈 | 대기 |
