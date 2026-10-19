@@ -7,7 +7,7 @@ resources:
 images:
   - name: monimo-local.invalid/collector
     newName: monimo/collector
-    newTag: dev
+    newTag: no-such-tag
   - name: monimo-local.invalid/ingester
     newName: monimo/ingester
     newTag: dev
