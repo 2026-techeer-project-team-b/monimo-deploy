@@ -20,3 +20,12 @@ metadata:
     argocd.argoproj.io/sync-options: Prune=false
   labels:
     app.kubernetes.io/part-of: monimo
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+  labels:
+    app.kubernetes.io/part-of: monimo
