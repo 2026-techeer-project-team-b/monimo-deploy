@@ -18,10 +18,10 @@ spec:
   project: default
   sources:
     - repoURL: https://github.com/2026-techeer-project-team-b/monimo-deploy
-      targetRevision: develop
+      targetRevision: feat/20-local-argocd
       path: overlays/local/2-jobs
     - repoURL: https://github.com/2026-techeer-project-team-b/monimo-deploy
-      targetRevision: develop
+      targetRevision: feat/20-local-argocd
       path: overlays/local/3-apps
   destination:
     server: https://kubernetes.default.svc
