@@ -84,7 +84,7 @@ spec:
             - name: LOGGING_LEVEL_ORG_HIBERNATE_ORM_JDBC_BIND
               value: info
             - name: LOGGING_LEVEL_COM_MONIMO_COLLECTOR
-              value: debug
+              value: info
           # 기동이 20~60초라 startup 이 끝나야 liveness 를 본다
           startupProbe:
             httpGet: { path: /livez, port: http }
