@@ -14,6 +14,8 @@ metadata:
     app.kubernetes.io/part-of: monimo-init
 spec:
   backoffLimit: 2
+  # 끝없이 멈춰 있지 않게 (#20 research 9절 ⑤ : 컨테이너가 끝났는데 Running 으로 남았다). 넘기면 Failed 가 되고 ArgoCD 는 retry 로 다시 돌린다
+  activeDeadlineSeconds: 300
   template:
     metadata:
       labels:

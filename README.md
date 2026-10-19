@@ -80,13 +80,13 @@ kubectl -n apm set env deployment/collector MONIMO_COLLECTOR_OTLP_GRPC_TLS_CLIEN
 `up-local.sh` 는 내 컴퓨터의 파일을 `kubectl` 로 넣는다. 이 길은 **GitHub 에 push 된 것**을 ArgoCD 가 읽어 넣는다. 같은 클러스터에 둘을 섞지 않는다 : 하나로 올렸으면 그 `--down` 으로 지우고 다른 길로 올린다
 
 ```bash
-./scripts/up-argocd.sh          # ArgoCD 설치 → 레포 밖 준비물(local-prereqs.sh) → root 넣기 → 들어가는 법 출력
+./scripts/up-argocd.sh          # 레포 밖 준비물(local-prereqs.sh) → ArgoCD 설치 → root 넣기 → 들어가는 법 출력
 kubectl -n argocd port-forward svc/argocd-server 8080:443        # https://localhost:8080
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d   # admin 비밀번호
 argocd app sync root            # 또는 UI 에서 root → Sync
-argocd app list                 # 넷 다 Synced · Healthy (빈 클러스터에서 약 40초)
+argocd app list                 # root + 자식 셋, 넷 다 Synced · Healthy (빈 클러스터에서 약 40초)
 ./scripts/check-local.sh        # 관통 확인
-./scripts/up-argocd.sh --down   # argocd · apm · data · shop 을 지운다
+./scripts/up-argocd.sh --down   # argocd · apm · data · shop 을 지운다 (ArgoCD CRD 같은 클러스터 단위 자원은 남는다)
 ```
 
 - **사람이 누르는 것은 root 하나다** : root 는 manual, 자식 셋(`local-namespaces` · `local-infra` · `local-apps`)은 automated(prune · selfHeal 끔)

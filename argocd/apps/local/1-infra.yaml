@@ -20,5 +20,9 @@ spec:
     automated:
       prune: false
       selfHeal: false
+    # 실패한 sync 를 다시 해 본다 : automated 는 같은 커밋의 실패를 스스로 다시 하지 않는다 (준비 Job 하나가 늦게 실패하면 멈춰 선다)
+    retry:
+      limit: 3
+      backoff: { duration: 10s, factor: 2, maxDuration: 2m }
     syncOptions:
       - ServerSideApply=true

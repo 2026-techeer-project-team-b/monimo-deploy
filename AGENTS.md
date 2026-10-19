@@ -75,7 +75,7 @@
 | 마이그레이션 SQL 이 EKS 로 갈 길이 없다 | 로컬은 스크립트가 backend `db/` 를 ConfigMap 으로 넣지만 EKS 에는 그 폴더가 없다. 5단계(CI → ECR)에서 마이그레이션 이미지에 SQL 을 굽는다 (backend 쪽 Dockerfile) |
 | AWS 계정 · 결제 · 예산 알림, 도메인이 없다 (~~GitHub App~~ 은 2026-10-16 준비됨) | Terraform apply(`#17`) · cert-manager 인증서가 막힌다 |
 | 발표가 11월 4주로 밀렸다 (날짜 정본 `docs/plan.md`) | Terraform 이 이틀 넘게 막히면 eksctl 로 내린다. EKS 가 끝내 안 되면 로컬 k8s 로 데모를 찍는다 (`scripts/up-local.sh` · `up-argocd.sh` 가 그 바닥이다) |
-| ArgoCD 는 로컬에만 있다 (`overlays/eks/` · `argocd/apps/eks/` 없음) | 6단계에서 EKS 자식 Application 과 자동 sync 를 새로 적는다. 레포 밖 준비물(Secret · SQL)은 로컬은 스크립트, EKS 는 External Secrets · 마이그레이션 이미지로 바꿔야 ArgoCD 혼자 선다 |
+| ArgoCD 는 로컬에만 있다 (`overlays/eks/` · `argocd/apps/eks/` 없음) | 6단계에서 EKS 자식 Application 과 자동 sync 를 새로 적는다. 준비 Job 셋의 PreSync hook 주석은 base 에 있어 EKS 도 같은 뜻(앱 자식 안에서 앱보다 먼저)으로 받는다. 레포 밖 준비물(Secret · SQL)은 로컬은 스크립트, EKS 는 External Secrets · 마이그레이션 이미지로 바꿔야 ArgoCD 혼자 선다 |
 
 ## 7. 참고
 

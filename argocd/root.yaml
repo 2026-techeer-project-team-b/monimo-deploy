@@ -1,4 +1,4 @@
-# 뿌리 Application (App of Apps, #20). argocd/apps/local 의 자식 넷을 만든다
+# 뿌리 Application (App of Apps, #20). argocd/apps/local 의 자식 셋을 만든다
 # syncPolicy 가 없다 = manual : 사람이 root 를 Sync 해야 자식이 생기거나 바뀐다 (로컬은 손으로 시작, ADR #66 ①)
 # 읽는 브랜치(targetRevision)는 다섯 줄을 같이 고친다 : 여기 하나 · 자식 셋 (local-apps 는 source 가 둘)
 apiVersion: argoproj.io/v1alpha1
