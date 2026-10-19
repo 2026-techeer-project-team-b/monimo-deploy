@@ -292,13 +292,147 @@ ArgoCD가 읽는 브랜치는 ... 작업중엔 push 로만 PR 올릴 때는 deve
 
 ## 7. 2차 정리
 
-<!-- 6절 뒤에 쓴다 -->
+### 고른 것 한 장
+
+| 무엇 | 고른 것 |
+|---|---|
+| 5.1 설치 | 공식 매니페스트, `v3.5.x` 최근 패치로 고정 (`argocd/install/` 이 버전 URL 을 가리킨다) |
+| 5.2 Application | App of Apps : root → `argocd/apps/local/` 의 자식 넷, 자식에 sync wave |
+| 5.3 준비 Job | hook (`BeforeHookCreation`) |
+| 5.4 네임스페이스 | ArgoCD 가 관리하되 `Prune=false` |
+| 5.5 브랜치 | 작업 중 `feat/20-local-argocd` → PR 때 `develop` |
+| 5.6 스크립트 | 둘 다 남긴다 : `local-prereqs.sh` 를 떼어 `up-local.sh` · `up-argocd.sh` 가 같이 쓴다 |
+
+### 파일 모양 (제안)
+
+```
+argocd/
+  install/kustomization.yaml     ArgoCD 설치 : 고정 버전 install.yaml URL (+ 필요하면 argocd-cm 패치, 아래 ①)
+  root.yaml                      뿌리 Application : argocd/apps/local 을 가리킨다 (사람이 한 번 넣는다)
+  apps/local/
+    0-namespaces.yaml            자식 Application · wave 0 → overlays/local/0-namespaces
+    1-infra.yaml                 자식 Application · wave 1 → overlays/local/1-infra
+    2-jobs.yaml                  자식 Application · wave 2 → overlays/local/2-jobs
+    3-apps.yaml                  자식 Application · wave 3 → overlays/local/3-apps
+
+scripts/
+  local-prereqs.sh               레포 밖 셋 (네임스페이스를 먼저 만들고 Secret · SQL ConfigMap · 인증서)
+  up-local.sh                    local-prereqs → kubectl 로 묶음 → 관통 확인   (ArgoCD 없이, 그대로)
+  up-argocd.sh                   ArgoCD 설치 → local-prereqs → root 넣기 → UI 들어가는 법 출력
+```
+
+- 번호표 · hook 주석은 **base 매니페스트에** 붙인다 : `kubectl apply` 는 이 주석을 무시하므로 `up-local.sh` 길에 영향이 없고, EKS 도 ArgoCD 라 같은 주석을 쓴다
+- `local-prereqs.sh` 가 네임스페이스를 먼저 만든다 : Secret 을 넣을 방이 있어야 해서다. 같은 매니페스트라 나중에 ArgoCD 가 그 방을 「이미 있음 = Synced」로 받는다
+
+### 흐름
+
+```
+./scripts/up-argocd.sh
+  ├ ArgoCD 설치 (argocd 네임스페이스, 파드 일곱 개 Ready 까지 wait)
+  ├ local-prereqs (방 셋 · Secret · SQL · 인증서)
+  └ root 넣기
+UI (port-forward) 에서 root Sync
+  └ wave 0 namespaces → wave 1 infra (Healthy 까지) → wave 2 jobs (hook 성공까지) → wave 3 apps
+관통 확인 (telemetrygen → ClickHouse 줄 수)
+```
+
+### 구현 전에 짚을 것 넷 (구현 때 실측으로 정한다)
+
+- **① 자식 Application 끼리 순서가 지켜지나 (2.4)** : 먼저 설정 없이 sync 해서 순서가 지켜지는지 본다. 한꺼번에 들어가면 `argocd-cm` 에 Application 상태 판정을 넣고(`argocd/install/` 패치) 다시 본다. 둘 다 9절에 적는다 (연습 목표 「sync 실패 읽기」 와도 겹친다)
+- **② hook 만 든 자식(2-jobs)은 언제 Healthy 인가** : hook 은 평소 자원 목록에 안 잡혀서, Job 이 끝나기 전에 자식이 Healthy 로 보이고 3-apps 가 먼저 들어갈 수 있다. 그러면 준비 Job 셋을 **3-apps 의 `PreSync` hook** 으로 옮긴다 (앱 넣기 직전에 같은 자식 안에서 돈다). 실측으로 정한다
+- **③ 관통 확인은 hook 이 아니라 스크립트로** : 「보내기 전 줄 수 → 보내기 → 늘었나」를 세야 해서 Job 하나로는 안 끝난다. `up-local.sh` 4단계를 `scripts/check-local.sh` 로 떼어 두 길이 같이 쓴다 (5.3 에서 `PostSync` hook 으로 적은 것을 바꾼다)
+- **④ `targetRevision` 바꾸기** : root 와 자식 넷 다섯 곳이다. PR 직전에 `develop` 으로 바꾸고 한 번 더 sync 해서 본다
+
+### 연습할 것 (9절에 결과)
+
+- **sync 실패** : 이미지 태그를 없는 값으로 → `Degraded` · 이벤트에서 `ErrImagePull` 읽기 / 매니페스트 문법 오류 → `ComparisonError` 읽기
+- **prune** : 레포에서 자원 하나(예 : ingester Service)를 지우고 Prune 없이 sync → OutOfSync 표시만 / Prune 켜고 sync → 지워짐 / 네임스페이스 파일을 지워 보고 `Prune=false` 가 막는지
+- **push → sync** : 수집기 환경변수 하나를 바꿔 push → OutOfSync · diff → Sync → 파드가 바뀜
 
 ---
 
 ## 8. 구현 프롬프트
 
 <!-- 승조 차례. AI 가 쓰면 그 사실을 표시한다 -->
+
+> **AI 가 쓴 초안이다** : 2026-10-19 Claude 가 승조의 정리본(「[ArgoCD] 기존 / 이제 / ArgoCD 공부 / 어떻게 구현할거냐?」)과 7절을 바탕으로 승조 말투로 썼다. 정리본의 「포와 클러스터」(오타) · hook 정의 「K8s 의 job 을 다시 실행시켜 주는 것」은 「sync 할 때마다 그 Job 을 새로 만들어 돌리는 것」 으로 맞춰 넣었다
+
+````
+#20 로컬 쿠버네티스에 ArgoCD 올려서 manual sync 로 넣는 거 구현해줘
+research.md 6절 7절에 정한 거 기준으로 하면 되고 정리하면 이런 느낌이야
+
+기존이랑 뭐가 달라지냐면
+기존 : 내 컴터 파일 -> kubectl apply -k -> 클러스터 (up-local.sh 가 차례로 치고 kubectl wait 로 기다림)
+이제 : 컴터 -> git push -> GitHub -> ArgoCD 가 읽고 -> 클러스터
+넣는 주체가 ArgoCD 고 GitHub 에 올라간 거만 본다
+순서는 매니페스트마다 번호표(sync wave) 붙여서 ArgoCD 가 작은 번호부터 Healthy 되면 다음 번호로
+
+설치
+공식 매니페스트(install.yaml) 로
+버전은 v3.5.x 최근 패치로 고정해줘
+argocd/install/kustomization.yaml 이 GitHub 의 그 버전 URL 을 가리키게 해서 파일 복사 안 하고 버전 한 줄로 관리
+UI 는 입구에 안 두고 port-forward 로만
+
+Application
+App of Apps 로
+argocd/root.yaml 을 사람이 한 번 넣으면 root 가 argocd/apps/local 폴더를 가리킨다
+그 폴더에 자식 Application 넷 (0-namespaces 1-infra 2-jobs 3-apps) 두고 각자 overlays/local/<묶음> 을 가리키게
+자식 파일에 sync wave 0 1 2 3 붙여서 숫자 작은 거부터
+syncPolicy 는 비워서 manual sync 로 (자동은 EKS 에서 할 거)
+
+Job
+준비 Job 셋 (kafka-init postgres-migrate clickhouse-migrate) 은 hook 으로
+sync 누를 때마다 옛 Job 지우고 새로 만들게 BeforeHookCreation
+K8s Job 은 한 번 만들면 못 고치니까 이게 맞는 듯
+번호표랑 hook 주석은 base 매니페스트에 붙여줘 (kubectl apply 는 무시하니까 up-local.sh 길에는 영향 없음)
+
+네임스페이스
+ArgoCD 가 관리하는데 Prune=false 붙여줘
+혹시나 실수해서 날아가면 안되니까 (네임스페이스 지우면 안에 PVC 까지 다 날아감)
+
+브랜치
+작업 중엔 targetRevision 을 feat/20-local-argocd 로 해서 push 만 하면 확인되게
+PR 올릴 때 develop 으로 바꿔줘 (root 랑 자식 넷 다섯 군데)
+develop 은 머지된 거만 들어가고 EKS 랑 같은 모양이니까 최종은 develop
+
+스크립트
+둘 다 살리는 방향으로
+레포 밖 값 넣기(Secret ConfigMap 인증서) 는 ArgoCD 가 못 하니까 up-local.sh 0단계를 scripts/local-prereqs.sh 로 떼어줘
+레포에는 Secret ConfigMap 이름만 있고 실제 값은 스크립트가 클러스터에 먼저 넣어야 파드가 켜질 때 받아 감
+네임스페이스도 local-prereqs 가 먼저 만들어야 Secret 넣을 방이 있음
+관통 확인(4단계) 도 scripts/check-local.sh 로 떼서 두 길이 같이 쓰게
+- up-local.sh : local-prereqs -> kubectl 로 묶음 -> check-local (ArgoCD 없이, 지금처럼 50초)
+- up-argocd.sh : ArgoCD 설치 -> local-prereqs -> root 넣기 -> UI 들어가는 법(port-forward 랑 admin 비번) 출력
+sync 는 내가 UI 에서 누를 거
+순서가 스크립트랑 sync wave 두 군데 적히니까 README 에 「순서 바꾸면 둘 다 고친다」 적어줘
+
+구현하면서 확인할 거 (7절 구현 전에 짚을 것)
+- 자식 Application 끼리 순서가 진짜 지켜지는지 먼저 설정 없이 해 보고, 한꺼번에 들어가면 argocd-cm 에 Application 상태 판정 넣기 (argocd/install 패치)
+- hook 만 든 2-jobs 가 Job 끝나기 전에 Healthy 로 보여서 3-apps 가 먼저 들어가면 준비 Job 셋을 3-apps 의 PreSync hook 으로 옮기기
+- 둘 다 뭘 봤는지 research.md 9절에 적기
+
+연습할 거 (9절에 결과)
+- sync 실패 : 없는 이미지 태그 -> Degraded 읽기 / yaml 문법 틀리기 -> ComparisonError 읽기
+- prune : 자원 하나 지우고 Prune 없이 sync -> OutOfSync 만 / Prune 켜고 sync -> 지워짐 / 네임스페이스 Prune=false 가 막는지
+- push -> sync : 수집기 환경변수 하나 바꿔서 push -> OutOfSync diff -> Sync -> 파드 바뀌는지
+
+하면 안 되는 거
+- 비밀값 레포에 올리지 말기 (레포 퍼블릭)
+- 스키마 파일 이 레포에 복사하지 말기
+- automated sync 켜지 말기 (로컬은 manual)
+- Image Updater 쓰지 말기 (태그는 CI 가 커밋, ADR #62 H)
+
+끝났다는 거
+- ArgoCD 가 뜨고 UI 들어가짐
+- root sync 한 번에 자식 넷이 순서대로 Synced Healthy
+- check-local 관통 통과
+- 고쳐서 push 하고 sync 누르면 클러스터가 따라옴
+- 실패 하나 prune 하나 밟아 보고 9절에 적기
+- up-local.sh 도 그대로 50초에 통과 (안 깨졌는지)
+- README 로컬 절 AGENTS.md §1 §5 §6 docs/plan.md 3단계 갱신
+
+코드 짜기 전에 바탕화면에 가이드 md 먼저 만들어서 보여주고 내가 보고 나서 진행해줘
+````
 
 ---
 
