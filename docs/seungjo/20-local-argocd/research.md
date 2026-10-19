@@ -164,11 +164,32 @@
 
 <!-- 승조가 쓴다. 2절에서 모르겠는 것, 5절 선택지에 되물을 것 -->
 
+> 2026-10-19 대화에서 승조가 물은 것을 Claude 가 모아 적었다 (답은 4절)
+
+- 「지금과 달라지는 것」 표를 더 자세히 : 스크립트는 순서를 적어 둔 문서인가? sync wave 는 무엇이 다른가?
+- ArgoCD 는 네임스페이스 하나에 파드 하나로 뜨나? 레포가 바뀌면 그걸 복사해서 넣나?
+- hook Job 은 ArgoCD 가 쿠버네티스가 만든 Job 을 지우고 새로 만드는 것인가? Job 과 CronJob 의 관계는?
+- Application 은 쿠버네티스 파일에 넣는 옵션인가? 매니페스트는 파일 하나에 전부 들어가나?
+- 파드로 띄울 것은 전부 매니페스트를 쓰고 `kind` 에 따라 달라지나?
+- Namespace 는 어떤 기준으로 나누나? ConfigMap · Secret 의 값은 어디로 가나? PVC 를 쓰면 PV 가 알아서 생기나?
+- 레포 밖에 있는 것(Secret · ConfigMap)은 ArgoCD 와 어떻게 이어지나?
+- App of Apps 는 Docker 멀티 스테이지 같은 것인가? 자식 목록을 적고 sync wave 로 순서대로 띄우는 방식인가?
+- 5.5 · 5.6 의 트레이드오프를 쉽게
+
 ---
 
 ## 4. 1차 정리
 
-<!-- 3절 뒤에 쓴다 -->
+- **스크립트도 레포에 있다** : 차이는 순서가 적힌 곳이 아니라 **누가 실행하나**다. `up-local.sh` 는 사람이 자기 컴퓨터에서 쳐야 순서가 지켜지고, sync wave 는 자원마다 붙은 번호표를 클러스터 안의 ArgoCD 가 읽어 지킨다 (처음 설명의 「순서가 스크립트가 아니라 레포에 있다」는 틀렸다)
+- **ArgoCD 는 파드 일곱 개쯤**이다 (`repo-server` · `application-controller` · `server` · `redis` · `dex` · `applicationset` · `notifications`). 복사가 아니라 **비교해서 다른 것만** 넣는다
+- **Job 은 ArgoCD 가 만들고 지우고, 쿠버네티스가 실행한다.** CronJob 은 사람 · ArgoCD 가 예약표만 넣고 Job 은 쿠버네티스가 만든다
+- **Application 은 따로 된 매니페스트**(`kind: Application`)이고 폴더를 가리키기만 한다. 다른 파일 안에 붙는 ArgoCD 것은 번호표 · hook **주석**이다. 보통 자원 하나 = 파일 하나, `kustomization.yaml` 이 폴더 목차
+- **매니페스트가 다 파드는 아니다** : Service · Namespace · ConfigMap · Secret · PVC · Application 은 파드가 아니다
+- **Namespace 기준은 사람이 정한다** (우리는 역할별 `data` · `apm` · `shop`). 방을 나눠도 네트워크는 기본으로 통한다
+- **Secret 은 base64 라 암호화가 아니다** : 클러스터 권한이 있으면 보인다. 값은 파드 안(환경변수 · 파일)으로만 들어가고 yaml 은 안 바뀐다
+- **PVC 는 storageClass 가 있으면 PV 가 저절로 생긴다.** 없으면 `Pending`
+- **레포에는 Secret · ConfigMap 의 이름만 있다** : 실제 값은 스크립트가 클러스터에 먼저 만들고, ArgoCD 가 넣은 파드가 켜질 때 찾아 쓴다. 없으면 `CreateContainerConfigError`
+- **App of Apps 는 멀티 스테이지와 다르다** : 줄 세우기(앞 단계 버림)가 아니라 나무(부모 · 자식 전부 남음). root 는 목록이 아니라 **폴더**를 가리키고, 번호표는 **자식 Application 파일**에 붙는다
 
 ---
 
@@ -234,6 +255,38 @@
 ## 6. 고르기 (사람 차례)
 
 <!-- 승조가 고른다. 5.1 ~ 5.6 -->
+
+2026-10-19 · 승조 정리본 (원문을 줄만 나눠 옮김) :
+
+```
+어떻게 구현할거냐?
+공식 메니페스트 사용
+Application은 App of Apps 방식으로 구현
+root 파일을 만들어서 그 root가 가리키는 폴더 속 자식 파일을 실행하는데
+그 자식 파일 안에 sync wave가 있어서 우선순위가 높은(숫자가 작은)것부터 실행한다
+Job은 hook을 사용해서
+네임스페이스 관리는 Prune 사용안하도록
+혹시나 실수해서 날아가면 안되니까
+ArgoCD가 읽는 브랜치는 ... 작업중엔 push 로만 PR 올릴 때는 develop
+기존 up-local.sh 를 어떻게 할까... 그래서 둘 다 살리는 방향으로
+```
+
+- **5.1 : ㄱ 공식 매니페스트**
+  - 버전은 안정판 `v3.5.x` 의 가장 최근 패치로 고정한다. `argocd/install/kustomization.yaml` 이 GitHub 의 그 버전 URL 을 가리키게 해서 파일 복사 없이 버전 한 줄로 관리
+- **5.2 : ㄱ App of Apps (묶음마다 Application 하나)**
+  - root 가 `argocd/apps/` 폴더를 가리키고, 그 폴더의 자식 Application 넷(`0-namespaces` · `1-infra` · `2-jobs` · `3-apps`)에 sync wave 를 붙여 묶음 순서를 지킨다
+  - 2.4 함정 대비 : 순서가 안 지켜지면 `argocd-cm` 에 Application 상태 판정 설정을 넣고 그것도 레포에 둔다
+- **5.3 : ㄱ hook**
+  - 준비 Job 셋은 sync 마다 지우고 새로(`BeforeHookCreation`). 관통 확인 `telemetrygen` 은 `PostSync` hook
+- **5.4 : ㄱ 관리하되 `Prune=false`** (승조 : 「혹시나 실수해서 날아가면 안되니까」)
+- **5.5 : ㄴ 작업 중 → ㄱ 마지막** (승조 : 「작업중엔 push 로만 PR 올릴 때는 develop」)
+  - 작업 중 : `targetRevision: feat/20-local-argocd` → push 만 하면 확인
+  - PR 올릴 때 : `targetRevision: develop` 으로 한 줄 바꾸고 머지. 최종은 머지된 것만 들어가고 EKS 와 같은 모양
+- **5.6 : ㄱ 둘 다 남긴다** (승조 : 「문제가 생기면 ArgoCD인지 메니페스트 인지 확인 가능 · ArgoCD 없이 띄울 수 있다」)
+  - 레포 밖 셋 넣기(지금 `up-local.sh` 0단계)를 `scripts/local-prereqs.sh` 로 떼어 두 길이 같이 쓴다
+  - `up-local.sh` : `local-prereqs` → `kubectl` 로 묶음 → 관통 확인 (ArgoCD 없이, 데모 비상 대책)
+  - `up-argocd.sh` : ArgoCD 설치 → `local-prereqs` → root 넣기 (sync 는 사람이)
+  - 남는 단점 : 묶음 순서가 두 곳(스크립트 차례 · sync wave)에 적힌다 → README 에 「순서를 바꾸면 둘 다 고친다」
 
 ---
 
