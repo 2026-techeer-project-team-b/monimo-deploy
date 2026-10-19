@@ -1,0 +1,21 @@
+# Application 상태 판정 (공식 문서 operator-manual/health.md 그대로, v3.5.5).
+# 1.8 에서 빠진 판정이라 이게 없으면 자식 Application 이 곧바로 Healthy 로 보여 root 가 sync wave 를 기다리지 않는다
+# 뜻 : 자식 Application 의 Healthy 는 그 Application 이 스스로 적어 둔 status.health 를 그대로 믿는다
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+data:
+  resource.customizations.health.argoproj.io_Application: |
+    hs = {}
+    hs.status = "Progressing"
+    hs.message = ""
+    if obj.status ~= nil then
+      if obj.status.health ~= nil then
+        hs.status = obj.status.health.status
+        if obj.status.health.message ~= nil then
+          hs.message = obj.status.health.message
+        end
+      end
+    end
+    return hs

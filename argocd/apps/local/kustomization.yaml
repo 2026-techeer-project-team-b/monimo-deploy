@@ -1,0 +1,9 @@
+# 로컬 자식 Application 넷. 번호표(sync-wave)가 up-local.sh 의 0 → 3 순서와 같다 : 순서를 바꾸면 둘 다 고친다
+# checks/telemetrygen 은 여기 없다 : 관통 확인은 scripts/check-local.sh (research.md 7절 ③)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - 0-namespaces.yaml
+  - 1-infra.yaml
+  - 2-jobs.yaml
+  - 3-apps.yaml

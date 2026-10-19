@@ -1,0 +1,9 @@
+# 로컬 ArgoCD 설치 (#20). 공식 install.yaml 을 고정 버전으로 가져온다 : 레포에 1.9 MB 를 복사하지 않는다
+# 올릴 때는 URL 의 버전 한 줄만 바꾼다. CRD 가 커서 server-side apply 로 넣는다 (scripts/up-argocd.sh)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+resources:
+  - https://raw.githubusercontent.com/argoproj/argo-cd/v3.5.5/manifests/install.yaml
+patches:
+  - path: argocd-cm-patch.yaml

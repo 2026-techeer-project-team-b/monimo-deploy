@@ -1,0 +1,24 @@
+# 번호 3 : 수집기 · 적재 처리기. 표 · 토픽이 있어야 뜨므로 2 가 끝난 뒤
+# 자식은 automated 다 (prune · selfHeal 끔) : root 가 만들면 스스로 sync 해서 Healthy 가 돼야 root 가 다음 번호로 간다.
+# 전부 manual 이면 root sync 가 자식마다 멈춰 선다 (research.md 9절). 사람이 누르는 입구는 root 하나다
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: local-apps
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/2026-techeer-project-team-b/monimo-deploy
+    targetRevision: feat/20-local-argocd
+    path: overlays/local/3-apps
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false
+    syncOptions:
+      - ServerSideApply=true
