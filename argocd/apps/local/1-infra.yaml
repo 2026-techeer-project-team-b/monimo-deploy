@@ -10,6 +10,9 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"
 spec:
   project: default
+  info:
+    - name: 연습
+      value: root 는 manual 인지
   source:
     repoURL: https://github.com/2026-techeer-project-team-b/monimo-deploy
     targetRevision: feat/20-local-argocd
