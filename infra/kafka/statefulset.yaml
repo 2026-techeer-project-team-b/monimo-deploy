@@ -81,8 +81,11 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/kafka/data
+  # apiVersion · kind 를 적는다 : 안 적으면 클러스터가 채운 값과 달라 ArgoCD 가 계속 OutOfSync 로 본다 (#20 실측)
   volumeClaimTemplates:
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]

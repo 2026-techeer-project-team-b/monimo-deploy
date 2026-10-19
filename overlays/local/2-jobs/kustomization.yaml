@@ -1,4 +1,4 @@
-# 로컬 준비 Job 셋. 인증서는 Job 이 아니라 scripts/up-local.sh 의 단계다 (research.md 6절)
+# 로컬 준비 Job 셋. 인증서는 Job 이 아니라 scripts/local-prereqs.sh 의 단계다 (research.md 6절)
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

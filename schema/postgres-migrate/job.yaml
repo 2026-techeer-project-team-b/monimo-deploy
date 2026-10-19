@@ -1,16 +1,22 @@
 # PostgreSQL 마이그레이션 (한 번 돌고 끝나는 Job, ADR #49). Flyway 설정은 backend compose.yaml 의 postgres-migrate 그대로
 # SQL 은 이 레포에 없다 (AGENTS.md §2 : 스키마 파일은 1a 동안 여기 두지 않는다).
-# 로컬은 scripts/up-local.sh 가 backend db/postgres 의 V*.sql 을 ConfigMap pg-migrations 로 넣고 여기서 /flyway/sql 로 건다.
+# 로컬은 scripts/local-prereqs.sh 가 backend db/postgres 의 V*.sql 을 ConfigMap pg-migrations 로 넣고 여기서 /flyway/sql 로 건다.
 # 하위 폴더(alert/ · config/ …)는 평평해지지만 Flyway 는 파일 이름(버전)만 보므로 같다. EKS 는 5단계에서 이미지에 굽는 쪽으로 옮긴다
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: postgres-migrate
+  # ArgoCD PreSync hook (#20) : 앱(3-apps)을 넣기 전에 지우고 새로 만들어 돌고, 성공해야 앱이 들어간다 (Job 은 고칠 수 없는 칸이 있어 그대로 다시 넣으면 막힌다). kubectl apply 는 이 주석을 무시한다
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
   labels:
     app.kubernetes.io/name: postgres-migrate
     app.kubernetes.io/part-of: monimo-init
 spec:
   backoffLimit: 2
+  # 끝없이 멈춰 있지 않게 (#20 research 9절 ⑤ : 컨테이너가 끝났는데 Running 으로 남았다). 넘기면 Failed 가 되고 ArgoCD 는 retry 로 다시 돌린다
+  activeDeadlineSeconds: 300
   template:
     metadata:
       labels:

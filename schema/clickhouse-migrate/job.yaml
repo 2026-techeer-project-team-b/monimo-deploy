@@ -1,15 +1,21 @@
 # ClickHouse 마이그레이션 (한 번 돌고 끝나는 Job, ADR #57). Flyway 설정은 backend compose.yaml 의 clickhouse-migrate 그대로
 # 이미지는 Flyway + ClickHouse 플러그인만 있고 SQL 은 없다 (backend db/clickhouse/Dockerfile).
-# SQL 은 scripts/up-local.sh 가 backend db/clickhouse 의 V*.sql 을 ConfigMap ch-migrations 로 넣는다
+# SQL 은 scripts/local-prereqs.sh 가 backend db/clickhouse 의 V*.sql 을 ConfigMap ch-migrations 로 넣는다
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: clickhouse-migrate
+  # ArgoCD PreSync hook (#20) : 앱(3-apps)을 넣기 전에 지우고 새로 만들어 돌고, 성공해야 앱이 들어간다 (Job 은 고칠 수 없는 칸이 있어 그대로 다시 넣으면 막힌다). kubectl apply 는 이 주석을 무시한다
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
   labels:
     app.kubernetes.io/name: clickhouse-migrate
     app.kubernetes.io/part-of: monimo-init
 spec:
   backoffLimit: 2
+  # 끝없이 멈춰 있지 않게 (#20 research 9절 ⑤ : 컨테이너가 끝났는데 Running 으로 남았다). 넘기면 Failed 가 되고 ArgoCD 는 retry 로 다시 돌린다
+  activeDeadlineSeconds: 300
   template:
     metadata:
       labels:

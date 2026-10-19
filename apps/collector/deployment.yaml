@@ -101,7 +101,7 @@ spec:
               mountPath: /certs
               readOnly: true
       volumes:
-        # scripts/up-local.sh 가 넣는다 (EKS 는 External Secrets, ADR #66 ③). TLS 를 안 켜면 없어도 뜬다
+        # scripts/local-prereqs.sh 가 넣는다 (EKS 는 External Secrets, ADR #66 ③). TLS 를 안 켜면 없어도 뜬다
         - name: certs
           secret:
             secretName: otlp-certs-collector

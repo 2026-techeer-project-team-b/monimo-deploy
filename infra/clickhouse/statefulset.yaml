@@ -1,5 +1,5 @@
 # ClickHouse 한 대. 공식 이미지 StatefulSet (ADR #62 F). 설정은 backend compose.yaml 의 clickhouse 를 옮겼다
-# 계정은 Secret monimo-db 에서 읽는다 (scripts/up-local.sh 가 넣는다, 레포에는 이름만)
+# 계정은 Secret monimo-db 에서 읽는다 (scripts/local-prereqs.sh 가 넣는다, 레포에는 이름만)
 # compose 의 ulimits nofile 262144 는 파드에 그 칸이 없다. 노드 기본값으로 충분한지는 research.md 9절에 적었다
 apiVersion: apps/v1
 kind: StatefulSet
@@ -50,8 +50,11 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/clickhouse
+  # apiVersion · kind 를 적는다 : 안 적으면 클러스터가 채운 값과 달라 ArgoCD 가 계속 OutOfSync 로 본다 (#20 실측)
   volumeClaimTemplates:
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
