@@ -3,11 +3,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  # ArgoCD hook (#20) : sync 할 때마다 지우고 새로 만들어 돈다 (Job 은 고칠 수 없는 칸이 있어 그대로 다시 넣으면 막힌다). kubectl apply 는 이 주석을 무시한다
-  annotations:
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
   name: kafka-init
+  # ArgoCD PreSync hook (#20) : 앱(3-apps)을 넣기 전에 지우고 새로 만들어 돌고, 성공해야 앱이 들어간다 (Job 은 고칠 수 없는 칸이 있어 그대로 다시 넣으면 막힌다). kubectl apply 는 이 주석을 무시한다
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
   labels:
     app.kubernetes.io/name: kafka-init
     app.kubernetes.io/part-of: monimo-init
